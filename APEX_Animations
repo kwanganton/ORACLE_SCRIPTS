@@ -1,0 +1,35 @@
+----GET ANIMATION LINK-----
+https://lottiefiles.com/
+
+----Create a new css file and paste this, reference the css file in shared components
+or 
+---- Paste this on the page you would like to use
+your can download the image and reference that rather
+
+.t-Body-main {
+    background-image: url(FILE_URL);
+    background-size: cover;
+}
+
+
+
+
+-----ANIMATIONS-----
+1. CREATE A STATIC REGION WITH BLANK WITH ATTRIBUTE
+2. UNDER ADVANCED give id of svg_image and paste on Custom Attribute  style= "height: 500px"
+3. On page load or and event of your choice, set action to excute javascipt and paste below 
+
+
+//svg
+const anim = lottie.loadAnimation({
+container: document.getElementById('svg_image'), // required
+// path: `https://assets9.lottiefiles.com/packages/lf20_88z2psap.json`, // required
+path: `https://assets3.lottiefiles.com/packages/lf20_eiuwWh1Usy.json`,
+renderer: 'svg', // required
+loop: false, // optional
+autoplay: true, // optional
+});
+
+anim.onComplete = () => {
+console.log("My animation is complete");
+};
