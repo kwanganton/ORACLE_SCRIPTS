@@ -1,0 +1,13 @@
+with rws as (
+  select ID,CSV_COLUMN str from MY_TABLE
+  where CSV_COLUMN is not null
+)
+  select ID,regexp_substr (
+           str,
+           '[^,:]+',
+           1,
+           level
+         ) CSV_COLUMN
+  from   rws
+  connect by level <= 
+    length ( str ) - length ( replace ( str, ':' ) ) + 1
