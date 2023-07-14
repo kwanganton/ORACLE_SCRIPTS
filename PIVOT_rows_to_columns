@@ -1,0 +1,8 @@
+select *
+from Table
+pivot(
+avg(aggregate_column)as VALUE
+FOR Column_for_rows
+IN (
+'row_values')
+)
