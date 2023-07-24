@@ -1,0 +1,1 @@
+ upper(substr(my_string,1,1)) || substr(my_string,2,9999)
