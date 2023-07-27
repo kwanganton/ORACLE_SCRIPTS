@@ -1,0 +1,2 @@
+Case when column_YN = 'Y' Then '<span class="fa fa-check-square" style="color:green" aria-hidden="true"></span>'
+ELSE '<span class="fa fa-times-square" style="color:red" aria-hidden="true"></span>' END
