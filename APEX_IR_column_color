@@ -1,0 +1,12 @@
+----Assign STATIC ID to column
+example   ORG
+
+
+----Add Class 
+
+.a-IRR-table tr td[headers=ORG],
+.a-IRR-table tr th#ORG {
+   background-color:
+#c2a7ef
+;
+}
