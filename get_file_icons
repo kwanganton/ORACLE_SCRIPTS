@@ -1,0 +1,31 @@
+CREATE OR REPLACE FUNCTION F_GET_FILE_ICON 
+(
+  IN_MIMETYPE IN VARCHAR2 
+) RETURN VARCHAR2 AS 
+v_icon varchar2(255);
+
+BEGIN
+v_icon:=
+  Case
+      when instr(upper( IN_MIMETYPE),'IMAGE') > 0  then 
+     '<img width="25" height="25" src="https://img.icons8.com/color/25/image-file.png" alt="image-file"/>'
+   
+     when instr(upper( IN_MIMETYPE),'SHEET') > 0  then 
+     '<img width="25" height="25" src="https://img.icons8.com/color/25/ms-excel.png" alt="ms-excel"/>'
+
+      when instr(upper( IN_MIMETYPE),'WORD') > 0  then 
+     '<img width="25" height="25" src="https://img.icons8.com/color/25/ms-word.png" alt="ms-word"/>'
+
+      when instr(upper( IN_MIMETYPE),'PRESENTATION') > 0  then 
+     '<img width="25" height="25" src="https://img.icons8.com/color/25/ms-powerpoint--v1.png" alt="ms-powerpoint--v1"/>'
+   
+   when instr(upper( IN_MIMETYPE),'PDF') > 0  then 
+     '<img width="25" height="25" src="https://img.icons8.com/3d-fluency/25/pdf.png" alt="pdf"/>'
+   
+     ELSE
+     '<img width="25" height="25" src="https://img.icons8.com/color/25/document--v1.png" alt="document--v1"/>'
+     End;
+     
+     return v_icon;
+   
+END F_GET_FILE_ICON;
