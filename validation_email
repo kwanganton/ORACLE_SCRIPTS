@@ -1,0 +1,1 @@
+regexp_like (:PX_ITEM, '^[A-Za-z]+[A-Za-z0-9.]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$')
