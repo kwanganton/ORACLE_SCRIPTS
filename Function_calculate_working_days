@@ -1,0 +1,38 @@
+create or replace FUNCTION f_working_days(start_date date, working_days pls_integer
+) return date as
+    end_date       date;
+    counter        pls_integer := 0;
+    remaining_days pls_integer;
+    weeks          pls_integer;
+begin
+
+    if working_days = 0 then
+        end_date := start_date;
+    elsif to_char(start_date, 'fmdy') in ('sat', 'sun') then
+        if sign(working_days) = 1 then
+            end_date := next_day(start_date, 'monday');
+        else
+            end_date := next_day(start_date - 7, 'friday');
+        end if;
+    else
+        end_date := start_date;
+    end if;
+
+    if abs(working_days) <= 5 then
+        remaining_days := working_days;
+    else
+        weeks := floor(abs(working_days) / 5) * sign(working_days);
+        end_date := end_date + (weeks * 7);
+        remaining_days := mod(working_days, 5);
+    end if;
+
+    while (counter < abs(remaining_days))
+        loop
+            end_date := end_date + sign(working_days);
+            if to_char(end_date, 'fmdy') not in ('sat', 'sun') then
+                counter := counter + 1;
+            end if;
+        end loop;
+
+    return end_date;
+END f_working_days;
