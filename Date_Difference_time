@@ -1,0 +1,14 @@
+create or replace function f_datediff( in_what in varchar2,
+                                      in_start   in date,
+                                         in_end   in date ) return number
+    as
+        l_result    number;
+    begin
+        select (in_end-in_start) *
+               decode( upper(in_what),
+                       'SS', 24*60*60, 'MI', 24*60, 'HH', 24, NULL )
+        into l_result from dual;
+ 
+       return round(l_result,1);
+   end;
+   
