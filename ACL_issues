@@ -1,0 +1,12 @@
+select apex_web_service.make_rest_request('http://api.apexofficeprint.com/marco', 'GET') from dual;
+
+select utl_http.get_detailed_sqlerrm from dual;
+
+BEGIN
+    DBMS_NETWORK_ACL_ADMIN.APPEND_HOST_ACE(
+        host => '*',
+        ace => xs$ace_type(privilege_list => xs$name_list('connect'),
+                           principal_name => 'APEX_230200',
+                           principal_type => xs_acl.ptype_db));
+END;
+/
