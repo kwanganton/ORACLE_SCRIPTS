@@ -1,0 +1,92 @@
+create or replace PROCEDURE P_IMPLEMENT_AUDIT_COLS 
+(IN_TABLE varchar2 default null)AS
+v_table_chk number;
+v_col_chk number;
+
+BEGIN
+
+IF IN_TABLE is null then 
+/** Loop thru tables Check if Required columns exist **/
+for t in (SELECT distinct table_name FROM USER_TAB_COLUMNS)
+loop
+
+SELECT count(*) into v_col_chk
+FROM USER_TAB_COLUMNS
+WHERE table_name = t.table_name
+and column_name in ('CREATED_BY','CREATED','UPDATED','UPDATED_BY');
+
+IF v_col_chk=0 then
+
+execute immediate
+q'!Alter table !'||t.table_name||q'! 
+
+add (
+CREATED_BY varchar2(200) ,
+CREATED date,
+UPDATED_BY varchar2(200),
+UPDATED date )!';
+
+
+
+/************************************************************************************************************************************/
+-- triggers
+execute immediate
+q'!create or replace trigger !'||t.table_name||q'!_biu
+    before insert or update 
+    on !'||t.table_name||q'! 
+    for each row
+begin
+    if inserting then
+        :new.created := sysdate;
+        :new.created_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+    end if;
+    :new.updated := sysdate;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+end !'||t.table_name||q'!_biu;!';
+
+END IF;
+END LOOP;
+END IF;
+
+
+IF IN_TABLE is not null then 
+
+SELECT count(*) into v_col_chk
+FROM USER_TAB_COLUMNS
+WHERE table_name = IN_TABLE
+and column_name in ('CREATED_BY','CREATED','UPDATED','UPDATED_BY');
+
+IF v_col_chk=0 then
+
+execute immediate
+q'!Alter table !'||IN_TABLE||q'! 
+
+add (
+CREATED_BY varchar2(200) ,
+CREATED date,
+UPDATED_BY varchar2(200),
+UPDATED date )!';
+
+
+
+/************************************************************************************************************************************/
+-- triggers
+execute immediate
+q'!create or replace trigger !'||IN_TABLE||q'!_biu
+    before insert or update 
+    on !'||IN_TABLE||q'! 
+    for each row
+begin
+    if inserting then
+        :new.created := sysdate;
+        :new.created_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+    end if;
+    :new.updated := sysdate;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+end !'||IN_TABLE||q'!_biu;!';
+
+
+End if;
+ENd if;
+
+END P_IMPLEMENT_AUDIT_COLS;
