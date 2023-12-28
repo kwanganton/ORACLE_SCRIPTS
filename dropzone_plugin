@@ -15,7 +15,15 @@ BEGIN
   -- loop over files cursor
   FOR l_rec_files IN l_cur_files LOOP
     -- do whatever processing is required prior to the insert into your own table
-    Insert into attachments (attachment_FILENAME,attachment_MIMETYPE,attachment_LASTUPD,attachment,FILE_id,MODULE)
+
+/**
+--For single file inserts--
+IF l_cur_files is not null then
+delete from attachments  where MODULE = 'YOUR FOLDER' and FILE_ID =:PXX_ID;
+END IF;
+**/
+
+Insert into attachments (attachment_FILENAME,attachment_MIMETYPE,attachment_LASTUPD,attachment,FILE_id,MODULE)
     Values (l_rec_files.filename,l_rec_files.mime_type,l_rec_files.date_created,l_rec_files.file_content,:P46_ID,'YOUR FOLDER')
     returning id into v_id;
 
@@ -32,5 +40,5 @@ END;
 ---Page Process delete file ---
 
   begin
-delete from attachments  where MODULE = 'AUDIT DOCS' and FILE_ID =:PXX_ID;
+delete from attachments  where MODULE = 'YOUR FOLDER' and FILE_ID =:PXX_ID;
 end;
