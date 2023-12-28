@@ -18,8 +18,8 @@ BEGIN
 
 /**
 --For single file inserts--
-IF l_cur_files is not null then
-delete from attachments  where MODULE = 'YOUR FOLDER' and FILE_ID =:PXX_ID;
+IF l_rec_files.file_content is not null then
+delete from attachments  where MODULE = 'YOUR FOLDER' and FILE_ID =:P32_ID;
 END IF;
 **/
 
