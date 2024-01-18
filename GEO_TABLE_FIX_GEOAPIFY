@@ -1,0 +1,14 @@
+ALTER TABLE table_name 
+ADD (
+ state VARCHAR2(100),
+ county VARCHAR2(100),
+city VARCHAR2(100),
+ municipality VARCHAR2(100),
+ district VARCHAR2(100),
+ road VARCHAR2(100),
+ result_type VARCHAR2(100),
+ formatted VARCHAR2(100),
+ address_line1 VARCHAR2(100),
+ address_line2 VARCHAR2(100)
+  
+);
