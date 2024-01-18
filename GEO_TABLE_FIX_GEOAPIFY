@@ -12,3 +12,45 @@ city VARCHAR2(100),
  address_line2 VARCHAR2(100)
   
 );
+
+
+/*** ADD TO TRIGGER ***/
+ if inserting and :new.lat is not null and :new.lng is not null then
+    
+    For i in (
+    SELECT   *
+  from 
+  json_table(apex_web_service.make_rest_request
+  (p_url => 'https://api.geoapify.com/v1/geocode/reverse?lat='||:new.lat||q'!&!'||'lon='||:new.lng||q'!&!'||'apiKey=65806068be8044909b6fd28acc3106b7'
+                                                    ,p_http_method => 'GET'),
+                 '$.features[*]' columns(
+                   
+          STATE varchar2(100)PATH '$.properties.state',
+          COUNTY varchar2(100)PATH '$.properties.county',
+          CITY varchar2(100)PATH '$.properties.county',
+MUNICIPALITY varchar2(100)PATH '$.properties.municipality',
+DISTRICT varchar2(100)PATH '$.properties.district',
+ROAD varchar2(100)PATH '$.properties.road',
+RESULT_TYPE varchar2(100)PATH '$.properties.result_type',
+FORMATTED varchar2(100)PATH '$.properties.formatted',
+ADDRESS_LINE1 varchar2(100)PATH '$.properties.address_line1',
+ADDRESS_LINE2 varchar2(100)PATH '$.properties.address_line2'
+      
+          
+
+          ))
+          )
+          loop
+          :new.state:=i.state;
+          :new.COUNTY:=i.COUNTY;
+          :new.CITY:=i.CITY;
+          :new.MUNICIPALITY:=i.MUNICIPALITY;
+          :new.DISTRICT:=i.DISTRICT;
+          :new.ROAD:=i.ROAD;
+          :new.RESULT_TYPE:=i.RESULT_TYPE;
+          :new.FORMATTED:=i.FORMATTED;
+          :new.ADDRESS_LINE1:=i.ADDRESS_LINE1;
+          :new.ADDRESS_LINE2:=i.ADDRESS_LINE2;
+          End loop;
+    
+    End if;
