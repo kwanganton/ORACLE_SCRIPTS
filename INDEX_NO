@@ -1,0 +1,46 @@
+create or replace PROCEDURE P_INDEX AS 
+v_max number;
+v_cnt number;
+v_program varchar2(50);
+BEGIN
+
+
+begin
+
+For i in (select * from hsde_student where 
+  (delete_yn is null or delete_yn ='N')
+  and (active_yn is null or active_yn ='Y')
+  and program_id is not null
+  and approved_by is not null
+  order by approved_on asc)
+  
+  loop
+        
+        begin
+        select max(nvl(index_count,0)) into v_max
+        from hsde_student
+        where 
+          (delete_yn is null or delete_yn ='N')
+          and (active_yn is null or active_yn ='Y')
+          and program_id =i.program_id
+          and APPLICATION_YEAR=i.APPLICATION_YEAR
+          and approved_by is not null
+          order by approved_on asc;
+          exception when no_data_found then v_max:=0; 
+        end;
+  
+  v_cnt:=v_max+1;
+  
+  begin
+  select INDEX_CODE into v_program from hsde_program where id = i.program_id;
+  exception when no_data_found then v_program:=null;
+  end;
+  
+  update hsde_student
+  set index_count =v_cnt, index_no=v_program||i.APPLICATION_YEAR||v_cnt
+  where id = i.id;
+End loop;  
+end;
+
+
+END P_INDEX;
