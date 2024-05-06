@@ -1,0 +1,41 @@
+CREATE OR REPLACE FUNCTION get_clob_from_url (p_url IN VARCHAR2) 
+RETURN CLOB IS
+   l_http_request   UTL_HTTP.req;
+   l_http_response  UTL_HTTP.resp;
+   l_text           VARCHAR2 (32767);
+   l_clob           CLOB;
+BEGIN
+   UTL_HTTP.set_transfer_timeout (100);
+
+   l_http_request := UTL_HTTP.begin_request (p_url);
+
+   l_http_response := UTL_HTTP.get_response (l_http_request);
+
+   -- Initialize CLOB
+   DBMS_LOB.createtemporary (l_clob, TRUE);
+
+   BEGIN
+      LOOP
+         UTL_HTTP.read_text (l_http_response, l_text, 32767);
+
+         IF DBMS_LOB.getlength (l_clob) IS NULL
+         THEN
+            DBMS_LOB.write (l_clob, LENGTH (l_text), 1, l_text);
+         ELSE
+            DBMS_LOB.writeappend(l_clob, LENGTH (l_text), l_text);
+         END IF;
+      END LOOP;
+
+   EXCEPTION
+      WHEN UTL_HTTP.end_of_body THEN
+         UTL_HTTP.end_response (l_http_response);
+   END;
+
+   RETURN l_clob;
+
+EXCEPTION
+   WHEN OTHERS THEN
+      -- exception handling goes here
+      UTL_HTTP.end_response (l_http_response);
+END get_clob_from_url;
+/
