@@ -1,0 +1,22 @@
+CREATE OR REPLACE FUNCTION F_EXCLUDE_HOLIDAY 
+(
+  START_DATE IN DATE 
+, END_DATE IN DATE 
+) RETURN NUMBER AS 
+v_count number;
+BEGIN
+SELECT COUNT(*) into v_count 
+FROM (
+    SELECT TRUNC(start_date + LEVEL - 1) AS work_day
+    FROM dual
+    CONNECT BY LEVEL <= TRUNC(end_date) - TRUNC(start_date) + 1
+    MINUS
+    SELECT holiday_date
+    FROM hrms_holidays
+)
+--WHERE TO_CHAR(work_day, 'DY') NOT IN ('SAT', 'SUN')
+;
+
+return v_count;
+
+END F_EXCLUDE_HOLIDAY;
