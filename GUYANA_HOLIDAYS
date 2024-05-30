@@ -1,0 +1,20 @@
+
+                         
+
+
+select * from json_table(
+apex_web_service.make_rest_request(p_url         =>'https://date.nager.at/api/v3/PublicHolidays/'||to_char(sysdate,'YYYY')||'/GY',
+p_http_method => 'GET',
+ p_username          =>null,
+   p_password          => null),
+
+                 '$[*]' columns(
+                  
+                   holiday_name VARCHAR2(255) PATH '$.name',
+           holiday_date DATE PATH '$.date'
+           
+     
+           )
+                  );
+         
+
