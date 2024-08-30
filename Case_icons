@@ -8,3 +8,27 @@ OR
 
 Case when column_YN = 'Y' Then '<span class="fa fa-check-circle" style="color:green" aria-hidden="true"></span>'
 ELSE '<span class="fa fa-times-circle" style="color:red" aria-hidden="true"></span>' END
+
+
+----------------DYNAMIC ICONS IN I REPORT--------------
+
+Case 
+       when column_yn ='Y'  Then 
+       '<span class="fa fa-check-circle reject-irrow" style="color:green" aria-hidden="true"></span>'
+       ELSE 
+       '<span class="fa fa-times-circle approve-irrow" style="color:red" aria-hidden="true"></span>'     END
+
+CREATE DYNAMIC ACTIONS----------------------------------
+
+1.DA ON CLICK BY CLASS
+ *jquery selector using class  eg   .approve-irrow
+
+2.DA ACtions
+*Set value of Item using $(this.triggeringElement).parent().data('id')
+
+*Execute serverside code eg
+update table
+set columnd_yn='Y'where id =:PXX_RECORD_ID;
+
+*Refresh Region
+ 
