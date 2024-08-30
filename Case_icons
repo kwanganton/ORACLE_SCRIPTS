@@ -18,6 +18,7 @@ Case
        ELSE 
        '<span class="fa fa-times-circle approve-irrow" style="color:red" aria-hidden="true"></span>'     END
 
+*Set Link Attributes as data-id=#ID#
 CREATE DYNAMIC ACTIONS----------------------------------
 
 1.DA ON CLICK BY CLASS
