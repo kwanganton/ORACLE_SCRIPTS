@@ -1,0 +1,23 @@
+1.Declare Page Function Variable
+
+var scrollPos;
+
+2.Add to DA Javascript Expression
+
+FOR MODAL DIALOG
+*Page Load 
+sessionStorage.removeItem('scrollPos');
+*Before Refresh  
+scrollPos = $('.t-Dialog-bodyWrapperIn').scrollTop();
+*After Refresh
+$('.t-Dialog-bodyWrapperIn').scrollTop(scrollPos); 
+
+FOR NORMAL PAGE
+*Page Load 
+sessionStorage.removeItem('scrollPos');
+*Before Refresh  
+scrollPos = $(window).scrollTop();
+*After Refresh
+$(window).scrollTop((scrollPos); 
+
+
