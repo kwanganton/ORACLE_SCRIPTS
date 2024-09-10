@@ -1,0 +1,8 @@
+ Case 
+       when      f_request_status(r.id)='REQUESTED' then 
+       ' <a href=" ' ||APEX_PAGE.GET_URL
+        (p_page => 28,p_items => 'P28_REQUEST_ID,P28_CLIENT_ID',p_values => r.ID||','||CLIENT_ID,p_clear_cache=>28 )|| ' " 
+        <<span aria-hidden="true" class="fa fa-user fam-clock fam-is-danger"></span></a>'
+       
+       when f_request_status(r.id)='CANCELLED' then '<span aria-hidden="true" class="fa fa-user fam-information fam-is-disabled"></span>'
+       Else '<span aria-hidden="true" class="fa fa-user fam-check fam-is-success"></span>' End as ASSIGN
