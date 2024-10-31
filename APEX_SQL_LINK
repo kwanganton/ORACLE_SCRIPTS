@@ -1,0 +1,2 @@
+APEX_PAGE.GET_URL
+        (p_page => 61,p_items => 'P61_ID',p_values => ID,p_clear_cache=>61)as link
