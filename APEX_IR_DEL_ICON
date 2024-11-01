@@ -1,0 +1,52 @@
+1. Add One More Dummy Column to Interactive Report
+select CUSTOMER_ID,
+       CUST_FIRST_NAME,
+       CUST_LAST_NAME,
+       CUST_STREET_ADDRESS1,
+       CUST_STREET_ADDRESS2,
+       CUST_CITY,
+       CUST_STATE,
+       CUST_POSTAL_CODE,
+       CUST_EMAIL,
+       PHONE_NUMBER1,
+       PHONE_NUMBER2,
+       URL,
+       CREDIT_LIMIT,
+       TAGS,
+       ACTIVE_CUSTOMER,
+       'Delete' Del
+  from DEMO_CUSTOMERS
+
+2. Set the Following Properties for the DEL Column
+Type: Link
+Heading: Delete
+Target > Type: URL
+URL: javascript:void(null);
+Link Text: <span class="t-Icon fa fa-trash delete-irrow" aria-hidden="true"></span>
+Link Attributes: data-id=#CUSTOMER_ID#
+
+3. Create a Page Item to Hold the Primary Key Column Value
+Name: P26_CUSTOMER_ID (set the name according to your page)
+Type: Hidden
+Value Protected: No
+
+4. Create a Dynamic Action for the Interactive Report’s Delete Row Button
+Name: DA_DELETEROW
+Event: Click
+Selection Type: jQuery Selector
+jQuery Selector: .delete-irrow
+Event Scope: Dynamic
+
+5. Create 3Action: Refresh
+Selection Type: Region
+Region: Customers (this is the interactive report region on my page) True Actions for the Above Dynamic Action DA_DELETEROW
+Action: Set Value
+Set Type: JavaScript Expression
+JavaScript Expression: $(this.triggeringElement).parent().data('id')
+Selection Type: Item(s)
+Item(s): P26_CUSTOMER_ID
+
+Action: Execute PL/SQL Code
+PL/SQL Code: Delete from demo_customers where customer_id = :P26_CUSTOMER_ID;
+Items to Submit: P26_CUSTOMER_ID
+
