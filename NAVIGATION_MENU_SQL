@@ -1,0 +1,27 @@
+SELECT 
+Case when le.PARENT_ENTRY_TEXT is not null then
+
+le.PARENT_ENTRY_TEXT||' -' End||le.ENTRY_TEXT  as Name,
+le.ENTRY_TEXT ,
+le.PARENT_ENTRY_TEXT ,
+le.DISPLAY_SEQUENCE ,
+le.ENTRY_TARGET ,
+le.AUTHORIZATION_SCHEME ,
+Case
+when le.AUTHORIZATION_SCHEME is null then 
+(select AUTHORIZATION_SCHEME from  apex_application_list_entries where LIST_ENTRY_ID=le.LIST_ENTRY_PARENT_ID)
+Else le.AUTHORIZATION_SCHEME End as ROLE,
+le.LIST_ENTRY_PARENT_ID ,
+le.LIST_ENTRY_ID ,
+   REGEXP_SUBSTR(le.ENTRY_TARGET, '[0-9]+', 1, 1) AS Page_Number
+   
+
+
+FROM 
+    apex_application_list_entries le
+WHERE 
+    le.application_id = 164
+    and list_name='Desktop Navigation Menu'
+    and condition_type is null
+    and entry_target is not null
+    order by name,display_sequence
