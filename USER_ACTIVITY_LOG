@@ -1,18 +1,55 @@
 1. Create local table
 
 
-   create table USER_ACTIVITY_LOG as ( select * from (SELECT 
-        TRUNC(view_timestamp) AS view_date,APPLICATION_SCHEMA_OWNER,
-        TO_CHAR(view_timestamp, 'HH24') AS view_hour,
-      
-        
-        
-        upper(apex_user) USER_NAME ,  count(*) events
-      
-    FROM 
-        apex_workspace_activity_log
-        where APPLICATION_SCHEMA_OWNER=USER
-        group by upper(apex_user),TRUNC(view_timestamp), TO_CHAR(view_timestamp, 'HH24'),APPLICATION_SCHEMA_OWNER));
+   create table USER_ACTIVITY_LOG as (
+                        select * from (SELECT 
+                            view_date,
+                            APPLICATION_SCHEMA_OWNER,
+                            view_hour,
+                            USER_NAME,
+                            COUNT(*) AS events,
+                            ROUND(SUM(active_minutes), 2) AS total_active_mins,  -- Active time in minutes
+                            ROUND(SUM(active_minutes) / 60, 2) AS total_active_hrs  -- Active time in hours
+                        FROM (
+                            SELECT 
+                                TRUNC(view_timestamp) AS view_date,
+                                APPLICATION_SCHEMA_OWNER,
+                                TO_CHAR(view_timestamp, 'HH24') AS view_hour,
+                                UPPER(apex_user) AS USER_NAME,
+                                CASE
+                                    WHEN view_timestamp - LAG(view_timestamp) OVER (
+                                        PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                        ORDER BY view_timestamp
+                                    ) <= INTERVAL '1' HOUR
+                                    THEN (
+                                        EXTRACT(SECOND FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                            PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                            ORDER BY view_timestamp
+                                        ))) / 60
+                                        + EXTRACT(MINUTE FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                            PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                            ORDER BY view_timestamp
+                                        )))
+                                        + EXTRACT(HOUR FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                            PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                            ORDER BY view_timestamp
+                                        ))) * 60
+                                    )
+                                    ELSE 0
+                                END AS active_minutes  -- Change from active_seconds to active_minutes
+                            FROM 
+                                apex_workspace_activity_log
+                            WHERE 
+                                APPLICATION_SCHEMA_OWNER = USER 
+                                AND TRUNC(view_timestamp) = TRUNC(SYSDATE)
+                        )
+                        GROUP BY 
+                            view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME
+                        ORDER BY 
+                            view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME));
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 2.Create Job
 BEGIN
@@ -25,20 +62,52 @@ BEGIN
                             WHERE TRUNC(view_date) = TRUNC(SYSDATE - 1);
 
                             -- Insert summarized data for the previous day
-                            INSERT INTO user_activity_log (view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME, events)
+                            INSERT INTO user_activity_log (view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME, events,total_active_mins,total_active_hrs)
                             SELECT 
-                                TRUNC(view_timestamp) AS view_date,
-                                APPLICATION_SCHEMA_OWNER,
-                                TO_CHAR(view_timestamp, ''HH24'') AS view_hour,
-                                UPPER(apex_user) AS USER_NAME,
-                                COUNT(*) AS events
-                            FROM 
-                                apex_workspace_activity_log
-                            WHERE 
-                                APPLICATION_SCHEMA_OWNER = USER 
-                                AND TRUNC(view_timestamp) = TRUNC(SYSDATE - 1)
-                            GROUP BY 
-                                TRUNC(view_timestamp), APPLICATION_SCHEMA_OWNER, TO_CHAR(view_timestamp, ''HH24''), UPPER(apex_user);
+                                  view_date,
+                                  APPLICATION_SCHEMA_OWNER,
+                                  view_hour,
+                                  USER_NAME,
+                                  COUNT(*) AS events,
+                                  ROUND(SUM(active_minutes), 2) AS total_active_mins,  -- Active time in minutes
+                                  ROUND(SUM(active_minutes) / 60, 2) AS total_active_hrs  -- Active time in hours
+                              FROM (
+                                  SELECT 
+                                      TRUNC(view_timestamp) AS view_date,
+                                      APPLICATION_SCHEMA_OWNER,
+                                      TO_CHAR(view_timestamp, 'HH24') AS view_hour,
+                                      UPPER(apex_user) AS USER_NAME,
+                                      CASE
+                                          WHEN view_timestamp - LAG(view_timestamp) OVER (
+                                              PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                              ORDER BY view_timestamp
+                                          ) <= INTERVAL '1' HOUR
+                                          THEN (
+                                              EXTRACT(SECOND FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                                  PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                                  ORDER BY view_timestamp
+                                              ))) / 60
+                                              + EXTRACT(MINUTE FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                                  PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                                  ORDER BY view_timestamp
+                                              )))
+                                              + EXTRACT(HOUR FROM (view_timestamp - LAG(view_timestamp) OVER (
+                                                  PARTITION BY UPPER(apex_user), APPLICATION_SCHEMA_OWNER, TRUNC(view_timestamp)
+                                                  ORDER BY view_timestamp
+                                              ))) * 60
+                                          )
+                                          ELSE 0
+                                      END AS active_minutes  -- Change from active_seconds to active_minutes
+                                  FROM 
+                                      apex_workspace_activity_log
+                                  WHERE 
+                                      APPLICATION_SCHEMA_OWNER = USER 
+                                      AND TRUNC(view_timestamp) = TRUNC(SYSDATE)
+                              )
+                              GROUP BY 
+                                  view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME
+                              ORDER BY 
+                                  view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME;
 
                             DBMS_OUTPUT.PUT_LINE(''Daily job completed at 5 AM EDT'');
                           END;',
