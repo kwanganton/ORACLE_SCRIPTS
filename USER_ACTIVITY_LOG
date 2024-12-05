@@ -1,8 +1,15 @@
-    SELECT 
+1. Create local table
+
+
+   create table USER_ACTIVITY_LOG as ( select * from (SELECT 
         TRUNC(view_timestamp) AS view_date,APPLICATION_SCHEMA_OWNER,
         TO_CHAR(view_timestamp, 'HH24') AS view_hour,
-        upper(apex_user) USER_NAME ,  count(*)
-        FROM 
+      
+        
+        
+        upper(apex_user) USER_NAME ,  count(*) events
+      
+    FROM 
         apex_workspace_activity_log
         where APPLICATION_SCHEMA_OWNER=USER
-        group by upper(apex_user),TRUNC(view_timestamp), TO_CHAR(view_timestamp, 'HH24'),APPLICATION_SCHEMA_OWNER
+        group by upper(apex_user),TRUNC(view_timestamp), TO_CHAR(view_timestamp, 'HH24'),APPLICATION_SCHEMA_OWNER))
