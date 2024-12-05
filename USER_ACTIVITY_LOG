@@ -12,4 +12,41 @@
     FROM 
         apex_workspace_activity_log
         where APPLICATION_SCHEMA_OWNER=USER
-        group by upper(apex_user),TRUNC(view_timestamp), TO_CHAR(view_timestamp, 'HH24'),APPLICATION_SCHEMA_OWNER))
+        group by upper(apex_user),TRUNC(view_timestamp), TO_CHAR(view_timestamp, 'HH24'),APPLICATION_SCHEMA_OWNER));
+
+2.Create Job
+BEGIN
+   DBMS_SCHEDULER.create_job(
+      job_name        => 'daily_user_activity_log_5am_edt_job',
+      job_type        => 'PLSQL_BLOCK',
+      job_action      => 'BEGIN
+                            -- Delete records for the previous day
+                            DELETE FROM user_activity_log
+                            WHERE TRUNC(view_date) = TRUNC(SYSDATE - 1);
+
+                            -- Insert summarized data for the previous day
+                            INSERT INTO user_activity_log (view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME, events)
+                            SELECT 
+                                TRUNC(view_timestamp) AS view_date,
+                                APPLICATION_SCHEMA_OWNER,
+                                TO_CHAR(view_timestamp, ''HH24'') AS view_hour,
+                                UPPER(apex_user) AS USER_NAME,
+                                COUNT(*) AS events
+                            FROM 
+                                apex_workspace_activity_log
+                            WHERE 
+                                APPLICATION_SCHEMA_OWNER = USER 
+                                AND TRUNC(view_timestamp) = TRUNC(SYSDATE - 1)
+                            GROUP BY 
+                                TRUNC(view_timestamp), APPLICATION_SCHEMA_OWNER, TO_CHAR(view_timestamp, ''HH24''), UPPER(apex_user);
+
+                            DBMS_OUTPUT.PUT_LINE(''Daily job completed at 5 AM EDT'');
+                          END;',
+      start_date      => CAST(trunc(sysdate, 'YEAR')+2/24 AS TIMESTAMP) at time zone 'America/New_York',
+      repeat_interval => 'FREQ=DAILY; BYHOUR=5; BYMINUTE=0; BYSECOND=0',
+  
+      enabled         => TRUE,
+      comments        => 'A daily job to clean and summarize user activity logs at 5 AM EDT'
+   );
+END;
+/
