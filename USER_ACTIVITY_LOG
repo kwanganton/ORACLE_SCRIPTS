@@ -102,7 +102,7 @@ BEGIN
                                       apex_workspace_activity_log
                                   WHERE 
                                       APPLICATION_SCHEMA_OWNER = USER 
-                                      AND TRUNC(view_timestamp) = TRUNC(SYSDATE)
+                                      AND TRUNC(view_timestamp) = TRUNC(SYSDATE-1)
                               )
                               GROUP BY 
                                   view_date, APPLICATION_SCHEMA_OWNER, view_hour, USER_NAME
