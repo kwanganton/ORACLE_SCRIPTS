@@ -6,3 +6,13 @@
        
        when f_request_status(r.id)='CANCELLED' then '<span aria-hidden="true" class="fa fa-user fam-information fam-is-disabled"></span>'
        Else '<span aria-hidden="true" class="fa fa-user fam-check fam-is-success"></span>' End as ASSIGN
+
+OR
+
+
+Case
+      when F_MATERIAL_DEL_STATUS(m.ID) in ('In Progress','Delivered') then
+           ' <a href=" ' ||APEX_PAGE.GET_URL
+        (p_page => 29,p_items => 'P29_ID',p_values => m.ID,p_clear_cache=>29 )|| ' " 
+        <span><img src="#IMAGE_PREFIX#app_ui/img/icons/apex-edit-pencil.png" class="apex-edit-pencil" alt=""></span></a>'
+  End as url,
