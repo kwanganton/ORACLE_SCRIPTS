@@ -1,0 +1,28 @@
+CREATE OR REPLACE FUNCTION is_mobile_device 
+RETURN NUMBER 
+IS
+    l_user_agent VARCHAR2(4000);
+    l_is_mobile  BOOLEAN := FALSE;
+BEGIN
+    -- Get the User-Agent header
+    l_user_agent := OWA_UTIL.get_cgi_env('HTTP_USER_AGENT');
+    
+    -- Check if the User-Agent indicates a mobile device
+    IF l_user_agent IS NOT NULL THEN
+        IF REGEXP_LIKE(l_user_agent, 'Mobile|Android|iPhone|iPad|iPod|Windows Phone', 'i') THEN
+            l_is_mobile := TRUE;
+        END IF;
+    END IF;
+    
+    -- Output the result
+    IF l_is_mobile THEN
+        RETURN 1;
+    ELSE
+        RETURN 2;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- In case of any error, default to desktop
+        RETURN 2;
+END is_mobile_device;
+/
