@@ -1,0 +1,67 @@
+-- create tables
+create sequence custom_token_seq;
+
+create table custom_token (
+    id                             number default on null custom_token_seq.NEXTVAL 
+                                   constraint custom_token_id_pk primary key,
+    username                       varchar2(255 char),
+    email                          varchar2(255 char),
+    app_id                         number,
+    token                          varchar2(4000 char),
+    active_yn                      varchar2(1 char) constraint custom_token_active_yn_ck
+                                   check (active_yn in ('Y','N')),
+    created                        date not null,
+    created_by                     varchar2(255 char) not null,
+    updated                        date not null,
+    updated_by                     varchar2(255 char) not null
+)
+;
+
+create sequence custom_2fa_seq;
+
+create table custom_2fa (
+    id                             number default on null custom_2fa_seq.NEXTVAL 
+                                   constraint custom_2fa_id_pk primary key,
+    username                       varchar2(255 char),
+    email                          varchar2(255 char),
+    app_id                         number,
+    active_yn                      varchar2(1 char) constraint custom_2fa_active_yn_ck
+                                   check (active_yn in ('Y','N')),
+    created                        date not null,
+    created_by                     varchar2(255 char) not null,
+    updated                        date not null,
+    updated_by                     varchar2(255 char) not null
+)
+;
+
+
+-- triggers
+create or replace trigger custom_token_biu
+    before insert or update 
+    on custom_token
+    for each row
+begin
+    if inserting then
+        :new.created := sysdate;
+        :new.created_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+    end if;
+    :new.updated := sysdate;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+end custom_token_biu;
+/
+
+create or replace trigger custom_2fa_biu
+    before insert or update 
+    on custom_2fa
+    for each row
+begin
+    if inserting then
+        :new.created := sysdate;
+        :new.created_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+    end if;
+    :new.updated := sysdate;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION','APP_USER'),user);
+end custom_2fa_biu;
+/
+
+
