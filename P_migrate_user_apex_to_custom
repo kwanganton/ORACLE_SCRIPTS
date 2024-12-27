@@ -1,0 +1,108 @@
+CREATE OR REPLACE PROCEDURE P_migrate_user_apex_to_custom (
+    from_app_id IN NUMBER,
+    to_app_id IN NUMBER,
+    in_workspace IN VARCHAR2,
+    in_action IN VARCHAR2
+) 
+IS
+    v_has_roles NUMBER;
+    v_is_assigned NUMBER;
+    v_role_id NUMBER;
+    v_user_id NUMBER;
+BEGIN
+
+IF IN_ACTION = 'SYNC ROLES' then
+    -- Check if roles exist
+    SELECT COUNT(*)
+    INTO v_has_roles
+    FROM APEX_APPL_ACL_USER_ROLES
+    WHERE application_id = from_app_id 
+    AND UPPER(workspace) = UPPER(in_workspace);
+    
+    IF v_has_roles = 0 THEN
+        RAISE_APPLICATION_ERROR(-20001, 'No ACL roles found for application ' || TO_CHAR(from_app_id));
+    END IF;
+
+    -- Sync Roles
+    FOR r IN (
+        SELECT DISTINCT r.role_name 
+        FROM APEX_APPL_ACL_USER_ROLES r
+        WHERE UPPER(workspace) = UPPER(in_workspace) 
+        AND application_id = from_app_id
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM custom_role cr 
+            WHERE cr.role = r.role_name
+        )               
+    ) LOOP
+        INSERT INTO custom_role (role) 
+        VALUES (r.role_name);
+    END LOOP;
+End if; 
+
+If IN_ACTION='SYNC USERS' then
+    -- Sync Users
+    FOR u IN (
+        SELECT DISTINCT aur.user_name, au.email,au.first_name,au.last_name
+        FROM APEX_APPL_ACL_USER_ROLES aur
+        JOIN apex_workspace_apex_users au ON au.user_name = aur.user_name
+        and au.workspace_name=aur.workspace
+        WHERE UPPER(aur.workspace) = UPPER(in_workspace)
+        AND aur.application_id = from_app_id
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM custom_user cu 
+            WHERE cu.username = aur.user_name 
+            AND cu.app_id = to_app_id
+        )
+    ) LOOP
+        INSERT INTO custom_user (username, email, app_id,full_name,app_type)
+        VALUES (u.user_name, u.email, to_app_id,u.first_name||' '||u.last_name,'INTERNAL');
+    END LOOP;
+End if;
+
+IF IN_ACTION='SYNC USER ROLE' then
+    -- Sync User Role Assignment
+    FOR cu IN (
+        SELECT id, username FROM custom_user
+    ) LOOP
+        FOR cr IN (
+            SELECT DISTINCT role_name  
+            FROM APEX_APPL_ACL_USER_ROLES r
+            WHERE UPPER(r.workspace) = UPPER(in_workspace) 
+            AND r.application_id = from_app_id 
+            AND r.user_name = cu.username
+        ) LOOP
+            -- Get custom role_id
+            SELECT id INTO v_role_id 
+            FROM custom_role 
+            WHERE UPPER(role) = UPPER(cr.role_name);
+             
+            -- Check if user already assigned
+            SELECT COUNT(*) INTO v_is_assigned 
+            FROM user_roles 
+            WHERE user_id = cu.id 
+            AND role_id = v_role_id;
+            
+            IF v_is_assigned = 0 THEN 
+                INSERT INTO user_roles (user_id, role_id) 
+                VALUES (cu.id, v_role_id);
+            END IF;          
+        END LOOP;
+    END LOOP;
+End if;    
+    -- Commit after all operations
+    COMMIT;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+        
+        
+        /** 
+        PLSQL Return Boolean in Shared Components/ Authorisation Scheme
+        return HAS_ROLE('ADMINISTRATOR');
+        
+        **/
+END P_migrate_user_apex_to_custom;
