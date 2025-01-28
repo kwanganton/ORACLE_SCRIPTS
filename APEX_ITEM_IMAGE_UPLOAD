@@ -1,0 +1,24 @@
+declare
+    l_file_names apex_t_varchar2;
+    l_file       apex_application_temp_files%rowtype;
+    v_id number;
+begin
+    l_file_names := apex_string.split (
+                        p_str => :P5_UPLOAD_REGISTRATION,
+                        p_sep => ':' );
+    for i in 1 .. l_file_names.count loop
+        select *
+          into l_file
+          from apex_application_temp_files
+         where name = l_file_names(i);
+        -- add code here to store the uploaded file in your own table
+        IF l_file.BLOB_CONTENT is not null then 
+        insert into attachments
+        (MODULE,FILE_ID,TYPE,ATTACHMENT,ATTACHMENT_FILENAME,ATTACHMENT_MIMETYPE,ATTACHMENT_LASTUPD)
+        values
+        ('VEHICLE',:P5_VENDOR_ID,'Registration',l_file.BLOB_CONTENT,l_file.NAME ,l_file.MIME_TYPE ,l_file.CREATED_ON)
+        returning id into v_id;
+         p_move_to_s3(v_id);
+         end if;
+    end loop;
+end;
