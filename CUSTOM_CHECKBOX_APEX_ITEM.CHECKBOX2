@@ -1,1 +1,20 @@
+1. Add API to QUERY
+
+APEX_ITEM.CHECKBOX2(1,ID,P_ATTRIBUTES=>'class="my_checkbox"') Check_box, 
+
+2.Create a Hidden/Unprotected Page Item
+P196_SELECTED_RECORDS
+
+3.Add to Global Declaration variable
+
+$(document).ready(function(){
+    $('.my_checkbox').on('click', function(){
+        var recID = "";
+        $('.my_checkbox:checked').each(function(){
+            recID += $(this).val() + ':';
+        });
+        recID = recID.substring(0, recID.length - 1);
+        $s('P196_SELECTED_RECORDS', recID);
+    });
+});
 
