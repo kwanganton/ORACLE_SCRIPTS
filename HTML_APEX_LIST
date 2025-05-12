@@ -1,0 +1,3 @@
+{loop "," COLUMN_NAME/}
+   <li>&APEX$ITEM.</li>
+{endloop/}
