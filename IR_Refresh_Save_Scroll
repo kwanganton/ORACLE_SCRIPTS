@@ -16,6 +16,6 @@ FOR NORMAL PAGE
 *Before Refresh  
 scrollPos = $(window).scrollTop();
 *After Refresh
-$(window).scrollTop((scrollPos); 
+$(window).scrollTop(scrollPos); 
 
 
