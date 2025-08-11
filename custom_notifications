@@ -1,4 +1,4 @@
-/** OBJECTS CREATION **/
+/** 1.OBJECTS CREATION **/
 
 -- create tables
 create sequence custom_notification_seq;
@@ -49,3 +49,12 @@ CUSTOM_NOTIFICATION
 
 # settings = { PK: "SEQ", semantics: "CHAR", auditCols: true, language: "EN", APEX: true }
 */
+
+/**2. Create application ITEM and APPLICATION COMPUTATION**/
+
+select count(*)
+from custom_notification n
+where n.user_name = :APP_USER
+  and n.read_yn = 'N'
+
+/**3. Add Entry to NAvigation Menu **/
