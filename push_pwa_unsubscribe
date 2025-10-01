@@ -1,0 +1,19 @@
+
+
+BEGIN
+
+  -- 1) Set APEX workspace context (change to your workspace name)
+  APEX_UTIL.SET_WORKSPACE(p_workspace => 'XXXX');
+  
+    FOR i IN (SELECT *
+                  FROM apex_appl_push_subscriptions
+                 WHERE user_name in (select username from custom_user where driver_id is null)) 
+                 LOOP
+        apex_pwa.unsubscribe_push_notifications(
+        p_application_id=>i.application_id
+        ,p_user_name=>i.user_name
+        ,p_subscription_interface=>i.subscription_interface
+   
+        );
+    END LOOP;
+END;
