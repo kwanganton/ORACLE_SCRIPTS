@@ -1,0 +1,80 @@
+🚀 Oracle APEX – Automating Workspace Backups with PL/SQL
+As APEX developers, keeping workspace backups safe and automated is essential.
+ Instead of exporting each application manually, here’s a PL/SQL script that does it all in one go.
+  
+🖥 The Script
+-- Bulk Export Oracle APEX A
+-- Includes folder structure + timestamp in filename
+
+DECLARE
+   l_workspace_name     VARCHAR2(255) := 'PROGRAMMER'; -- Change to your workspace
+   l_security_group_id  NUMBER;
+   l_zip_blob           BLOB;
+   l_export_files       apex_t_export_files;
+   l_temp_blob          BLOB;
+   l_workspace_label    VARCHAR2(255);
+   l_final_zip_name     VARCHAR2(255);
+   l_timestamp_str      VARCHAR2(30) := TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS');
+BEGIN
+   -- Set security context
+   l_security_group_id := apex_util.find_security_group_id(p_workspace => l_workspace_name);
+   apex_util.set_security_group_id(l_security_group_id);
+
+   -- Create temporary BLOB for ZIP
+   dbms_lob.createtemporary(l_zip_blob, TRUE);
+
+   -- Get clean workspace display name for folder
+   SELECT REGEXP_REPLACE(workspace_display_name, '[^a-zA-Z0-9_]', '_')
+     INTO l_workspace_label
+     FROM apex_applications
+    WHERE UPPER(workspace) = UPPER(l_workspace_name)
+      AND ROWNUM = 1;
+
+   -- Loop through all apps 
+   FOR app_rec IN (
+       SELECT application_id, application_name
+         FROM apex_applications
+        WHERE UPPER(workspace) = UPPER(l_workspace_name)
+   ) LOOP
+       -- Export application files
+       l_export_files := apex_export.get_application(app_rec.application_id);
+
+       -- Add files to ZIP with folder hierarchy
+       FOR i IN 1 .. l_export_files.COUNT LOOP
+           l_temp_blob := apex_util.clob_to_blob(l_export_files(i).contents);
+
+           apex_zip.add_file(
+               l_zip_blob,
+               l_workspace_label || '/apps/app_' || app_rec.application_id || '/' || l_export_files(i).name,
+               l_temp_blob
+           );
+       END LOOP;
+   END LOOP;
+ 
+   apex_zip.finish(l_zip_blob);
+   l_final_zip_name := l_workspace_label || 'backup' || l_timestamp_str || '.zip';
+
+   -- Download ZIP
+apex_http.download(l_zip_blob, 'application/zip', l_final_zip_name);
+
+   -- Clean up
+   dbms_lob.freetemporary(l_zip_blob);
+END;
+  
+⚡ Implementation Steps
+⿡ Add a Button → e.g., Download Apps
+ ⿢ Set Action = Redirect to Page in this Application
+ ⿣ Set Request = DOWNLOAD_APPS
+ ⿤ Create a Before Header Process → Type = PL/SQL Code
+ ⿥ Paste the script above
+ ⿦ Add a Condition → Request = DOWNLOAD_APPS
+ ⿧ Change l_workspace_name to match your workspace
+
+Click the button → Instantly download a ZIP with all your apps 🚀
+  
+🎯 Benefits
+✔ Batch Export → All apps in one go
+ ✔ Structured ZIP → Organized folders for each application
+ ✔ Timestamped → Unique backups (no overwrites)
+ ✔ Automated → Perfect for migrations & deployments
+ ✔ Time-Saving → No manual export for each application
