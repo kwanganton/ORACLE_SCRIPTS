@@ -1,0 +1,61 @@
+declare
+        v_sql_error clob;
+    p_minutes_threshold number :=1;
+BEGIN
+  FOR s IN (
+    SELECT s.sid,
+           s.serial#,
+           s.username,
+           s.status,
+           s.sql_id,
+           s.module,
+           s.program,
+           s.last_call_et / 60 AS minutes_running
+    FROM   v$session s
+    WHERE  s.status = 'ACTIVE'
+      AND  s.username IS NOT NULL
+      --AND  s.username <> 'SYS'
+    ORDER BY s.last_call_et DESC
+  )
+  LOOP
+    BEGIN
+      IF s.minutes_running > p_minutes_threshold THEN
+        -- Skip internal APEX jobs and self-kill
+        IF s.module NOT LIKE 'WWV_FLOW%' AND USER != s.username THEN
+--          BEGIN
+            rdsadmin.rdsadmin_util.kill(
+              sid    => s.sid,
+              serial => s.serial#,
+              method => 'IMMEDIATE'
+            );
+--
+--             INSERT INTO session_kill_log (
+--               sid, serial#, username, program, module,
+--               minutes_running, sql_id, kill_reason, error_message,SQL_TEXT
+--             ) VALUES (
+--               s.sid, s.serial#, s.username, s.program, s.module,
+--               s.minutes_running, s.sql_id,
+--               'Auto-killed: exceeded ' || p_minutes_threshold || ' min',
+--               NULL, (select sql_text from V$SQL x where x.sql_id = s.sql_id)
+--             );
+--
+--           EXCEPTION
+--             WHEN OTHERS THEN
+--               v_sql_error := SQLERRM;
+--               INSERT INTO session_kill_log (
+--                 sid, serial#, username, program, module,
+--                 minutes_running, sql_id, kill_reason, error_message, SQL_TEXT
+--               ) VALUES (
+--                 s.sid, s.serial#, s.username, s.program, s.module,
+--                 s.minutes_running, s.sql_id,
+--                 'Kill attempt failed (threshold ' || p_minutes_threshold || ' min)',
+--                 v_sql_error,  (select sql_text from V$SQL x where x.sql_id = s.sql_id and ROWNUM=1)
+--               );
+--           END;
+         END IF;
+      END IF;
+    END;
+  END LOOP;
+
+  COMMIT;
+END;
