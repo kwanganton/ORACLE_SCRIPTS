@@ -25,7 +25,7 @@ URL: javascript:void(null);
 Link Text: <span class="t-Icon fa fa-trash delete-irrow" aria-hidden="true"></span>
 Link Attributes: data-id=#CUSTOMER_ID#
 
-data-id='&ID.'
+CARDS => data-id='&ID.'
 
 3. Create a Page Item to Hold the Primary Key Column Value
 Name: P26_CUSTOMER_ID (set the name according to your page)
@@ -45,6 +45,8 @@ Region: Customers (this is the interactive report region on my page) True Action
 Action: Set Value
 Set Type: JavaScript Expression
 JavaScript Expression: $(this.triggeringElement).parent().data('id')
+
+CARDS => $(this.triggeringElement).data('id')
 Selection Type: Item(s)
 Item(s): P26_CUSTOMER_ID
 
