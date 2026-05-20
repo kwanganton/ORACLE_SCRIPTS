@@ -1,0 +1,14 @@
+begin
+    apex_util.set_workspace(p_workspace => 'WSPACE');
+For push in (select distinct user_name
+          from apex_appl_push_subscriptions
+         where application_id = 198 and user_name=u.username) loop
+
+    apex_pwa.send_push_notification(
+        p_application_id => 122,
+        p_user_name      => 'TDRIVER',
+        p_title          => 'Driver App Alert',
+        p_body           => 'This is a test2 message from the driver app.');
+End loop;
+    apex_pwa.push_queue;  -- no parameters needed
+end;
