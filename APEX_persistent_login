@@ -1,0 +1,13 @@
+declare
+
+    v_persistent boolean := true;
+begin
+
+
+apex_authentication.login(
+    p_username => :P9999_USERNAME,
+    p_password => :P9999_PASSWORD,
+    p_set_persistent_auth => v_persistent );
+
+
+end;
