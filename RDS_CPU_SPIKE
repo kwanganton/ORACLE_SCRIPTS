@@ -1,0 +1,16 @@
+SELECT s.sid, s.serial#, s.username, s.status, s.module, s.program,
+       s.last_call_et AS seconds_running,
+       s.sql_id,
+       q.sql_text
+FROM   v$session s
+LEFT JOIN v$sql q ON q.sql_id = s.sql_id
+WHERE  s.status = 'ACTIVE'
+  AND  s.username IS NOT NULL
+ORDER BY s.last_call_et DESC;
+
+
+SELECT * FROM TABLE(rdsadmin.rds_dba_metrics.get_metric_history(
+  metric_name => 'CPUCreditBalance',
+  start_time  => SYSDATE - (30/1440),  -- last 30 minutes
+  end_time    => SYSDATE
+));
