@@ -1,0 +1,24 @@
+1. "Function and Variable Declaration" — the first section at the top of the page (set its toggle to Configure Hooks). Paste:
+
+// Detect Apple devices once at worker startup.
+// /Macintosh/ included because iPadOS 13+ reports a Mac UA.
+// Do NOT use navigator.maxTouchPoints here - it does not
+// exist in the service worker context (WorkerNavigator)
+// and would silently break iPad detection.
+const APEX_SW_APPLE_BYPASS =
+    /iPhone|iPad|iPod|Macintosh/i.test(self.navigator.userAgent);
+
+if (APEX_SW_APPLE_BYPASS) {
+    console.info('[APEX SW] Apple device detected - fetch bypass active');
+}
+
+
+2. "Before" box under Event: fetch — replace your current block with:
+// iOS/iPadOS white screen fix: exit before respondWith() so
+// the browser handles requests natively on Apple devices.
+// WebKit service worker cache bugs corrupt cached responses
+// and white-screen installed PWAs until reinstalled.
+// Android/Chromium below runs APEX defaults unchanged.
+if (APEX_SW_APPLE_BYPASS) {
+    return;
+}
