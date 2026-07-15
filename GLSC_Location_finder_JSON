@@ -1,0 +1,79 @@
+create or replace FUNCTION f_get_location_json (
+    p_lat        IN  NUMBER,
+    p_lng        IN  NUMBER,
+    p_box_deg    IN  NUMBER DEFAULT 0.25
+) RETURN CLOB
+AS
+    c_base   CONSTANT VARCHAR2(300) :=
+        'https://services3.arcgis.com/9QdN8AGqFexQGuDv/arcgis/rest/services/'||
+        'Guyana_National_Gazetteer/FeatureServer/0/query';
+    l_xmin   NUMBER := p_lng - p_box_deg;
+    l_ymin   NUMBER := p_lat - p_box_deg;
+    l_xmax   NUMBER := p_lng + p_box_deg;
+    l_ymax   NUMBER := p_lat + p_box_deg;
+    l_url    VARCHAR2(4000);
+    l_clob   CLOB;
+    l_result CLOB;
+BEGIN
+    l_url :=
+        c_base
+        || '?where='        || apex_util.url_encode('1=1')
+        || chr(38) || 'geometry='       ||
+             apex_util.url_encode(l_xmin||','||l_ymin||','||l_xmax||','||l_ymax)
+        || chr(38) || 'geometryType=esriGeometryEnvelope'
+        || chr(38) || 'inSR=4326'
+        || chr(38) || 'spatialRel=esriSpatialRelIntersects'
+        || chr(38) || 'outFields='       || apex_util.url_encode('NAME,FEATURE,LOCATION,REGIONAL_C')
+        || chr(38) || 'returnGeometry=true'
+        || chr(38) || 'outSR=4326'
+        || chr(38) || 'resultRecordCount=2000'
+        || chr(38) || 'f=json';
+
+    l_clob := apex_web_service.make_rest_request(
+                  p_url         => l_url,
+                  p_http_method => 'GET');
+
+    SELECT JSON_OBJECT(
+               'name'     VALUE t.name,
+               'feature'  VALUE t.feature,
+               'location' VALUE t.location,
+               'region'   VALUE t.regional_c,
+               'lat'      VALUE t.lat,
+               'lng'      VALUE t.lng,
+               'dist_km'  VALUE ROUND(t.dist_km, 2)
+               RETURNING CLOB
+           )
+      INTO l_result
+      FROM (
+        SELECT jt.name, jt.feature, jt.location, jt.regional_c, jt.lat, jt.lng, dist_km
+          FROM (
+            SELECT jt.name, jt.feature, jt.location, jt.regional_c, jt.lat, jt.lng,
+                   6371 * 2 * asin(
+                       sqrt(
+                           power(sin(((jt.lat - p_lat) * acos(-1)/180)/2), 2)
+                         + cos(p_lat  * acos(-1)/180)
+                         * cos(jt.lat * acos(-1)/180)
+                         * power(sin(((jt.lng - p_lng) * acos(-1)/180)/2), 2)
+                       )
+                   ) AS dist_km
+              FROM JSON_TABLE(
+                     l_clob, '$.features[*]'
+                     COLUMNS (
+                       name       VARCHAR2(200)  PATH '$.attributes.NAME',
+                       feature    VARCHAR2(100)  PATH '$.attributes.FEATURE',
+                       location   VARCHAR2(1000) PATH '$.attributes.LOCATION',
+                       regional_c VARCHAR2(50)   PATH '$.attributes.REGIONAL_C',
+                       lat        NUMBER         PATH '$.geometry.y',
+                       lng        NUMBER         PATH '$.geometry.x'
+                     )) jt
+             ORDER BY dist_km
+          ) jt
+         WHERE ROWNUM = 1
+      ) t;
+
+    RETURN l_result;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+END f_get_location_json;
