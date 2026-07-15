@@ -1,0 +1,30 @@
+SELECT jt.name, jt.feature, jt.location, jt.regional_c,
+       jt.map_refere, jt.dms_lat, jt.dms_long, jt.utm_n, jt.utm_e,
+       jt.objectid, jt.latitude, jt.longitude
+FROM   JSON_TABLE(
+         APEX_WEB_SERVICE.MAKE_REST_REQUEST(
+           p_url =>
+             'https://services3.arcgis.com/9QdN8AGqFexQGuDv/arcgis/rest/services/Guyana_National_Gazetteer/FeatureServer/0/query'
+             || '?where='  || APEX_UTIL.URL_ENCODE('1=1')
+             || chr(38) || 'outFields=*'
+             || chr(38) || 'returnGeometry=true'
+             || chr(38) || 'outSR=4326'
+             || chr(38) || 'resultRecordCount=10000'
+             || chr(38) || 'maxRecordCountFactor=5'
+             || chr(38) || 'f=json',
+           p_http_method => 'GET'),
+         '$.features[*]'
+         COLUMNS (
+           name       VARCHAR2(200)  PATH '$.attributes.NAME',
+           feature    VARCHAR2(100)  PATH '$.attributes.FEATURE',
+           location   VARCHAR2(1000) PATH '$.attributes.LOCATION',
+           regional_c NUMBER         PATH '$.attributes.REGIONAL_C',
+           map_refere VARCHAR2(100)  PATH '$.attributes.MAP_REFERE',
+           dms_lat    VARCHAR2(50)   PATH '$.attributes.DMS_Lat',
+           dms_long   VARCHAR2(50)   PATH '$.attributes.DMS_Long',
+           utm_n      NUMBER         PATH '$.attributes.UTM_N',
+           utm_e      VARCHAR2(50)   PATH '$.attributes.UTM_E',
+           objectid   NUMBER         PATH '$.attributes.ObjectId',
+           latitude   NUMBER         PATH '$.geometry.y',
+           longitude  NUMBER         PATH '$.geometry.x'
+         )) jt;
