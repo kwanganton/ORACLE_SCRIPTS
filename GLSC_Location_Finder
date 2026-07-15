@@ -1,0 +1,80 @@
+create or replace FUNCTION f_get_location (
+    p_lat        IN  NUMBER,
+    p_lng        IN  NUMBER,
+    p_box_deg    IN  NUMBER DEFAULT 0.25   -- half-size of search box in degrees (~27 km)
+) RETURN VARCHAR2
+AS
+    c_base   CONSTANT VARCHAR2(300) :=
+        'https://services3.arcgis.com/9QdN8AGqFexQGuDv/arcgis/rest/services/'||
+        'Guyana_National_Gazetteer/FeatureServer/0/query';
+
+    l_xmin   NUMBER := p_lng - p_box_deg;
+    l_ymin   NUMBER := p_lat - p_box_deg;
+    l_xmax   NUMBER := p_lng + p_box_deg;
+    l_ymax   NUMBER := p_lat + p_box_deg;
+
+    l_url    VARCHAR2(4000);
+    l_clob   CLOB;
+
+    l_name   VARCHAR2(200);
+    l_feat   VARCHAR2(100);
+    l_loc    VARCHAR2(1000);
+    l_dist   NUMBER;
+BEGIN
+    -- Envelope geometry: xmin,ymin,xmax,ymax in WGS84 (inSR=4326)
+    l_url :=
+        c_base
+        || '?where='        || apex_util.url_encode('1=1')
+        || chr(38) || 'geometry='       ||
+             apex_util.url_encode(l_xmin||','||l_ymin||','||l_xmax||','||l_ymax)
+        || chr(38) || 'geometryType=esriGeometryEnvelope'
+        || chr(38) || 'inSR=4326'
+        || chr(38) || 'spatialRel=esriSpatialRelIntersects'
+        || chr(38) || 'outFields='       || apex_util.url_encode('NAME,FEATURE,LOCATION')
+        || chr(38) || 'returnGeometry=true'
+        || chr(38) || 'outSR=4326'
+        || chr(38) || 'resultRecordCount=2000'
+        || chr(38) || 'f=json';
+
+    l_clob := apex_web_service.make_rest_request(
+                  p_url         => l_url,
+                  p_http_method => 'GET');
+
+    -- Find the nearest feature by haversine distance (km), R = 6371
+    SELECT name, feature, location, dist_km
+      INTO l_name, l_feat, l_loc, l_dist
+      FROM (
+        SELECT jt.name,
+               jt.feature,
+               jt.location,
+               6371 * 2 * asin(
+                   sqrt(
+                       power(sin(((jt.lat - p_lat) * acos(-1)/180)/2), 2)
+                     + cos(p_lat  * acos(-1)/180)
+                     * cos(jt.lat * acos(-1)/180)
+                     * power(sin(((jt.lng - p_lng) * acos(-1)/180)/2), 2)
+                   )
+               ) AS dist_km
+          FROM JSON_TABLE(
+                 l_clob, '$.features[*]'
+                 COLUMNS (
+                   name     VARCHAR2(200)  PATH '$.attributes.NAME',
+                   feature  VARCHAR2(100)  PATH '$.attributes.FEATURE',
+                   location VARCHAR2(1000) PATH '$.attributes.LOCATION',
+                   lat      NUMBER         PATH '$.geometry.y',
+                   lng      NUMBER         PATH '$.geometry.x'
+                 )) jt
+         ORDER BY dist_km
+      )
+     WHERE ROWNUM = 1;
+
+    RETURN l_name
+           || ' ('  || l_feat || ') - '
+           || l_loc
+           || ' [~' || ROUND(l_dist, 2) || ' km]';
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;  -- nothing within the search box
+END f_get_location;
+
