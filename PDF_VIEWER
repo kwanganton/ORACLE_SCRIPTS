@@ -1,39 +1,46 @@
-# Oracle APEX PDF.js Viewer (Amazon S3)
+# Oracle APEX PDF.js Viewer
 
-A lightweight PDF viewer for Oracle APEX using **PDF.js** and **Amazon S3 pre-signed URLs**. This solution renders PDFs directly inside an APEX page without requiring the browser's native PDF viewer, making it compatible with desktop and mobile browsers.
+A lightweight PDF viewer for Oracle APEX that renders PDF documents directly inside an APEX page using **PDF.js** and **Amazon S3 pre-signed URLs**.
+
+Unlike the browser's native PDF viewer, this implementation works consistently across desktop and mobile browsers while providing built-in page navigation and zoom controls.
+
+![Oracle APEX](https://img.shields.io/badge/Oracle-APEX-red)
+![PDF.js](https://img.shields.io/badge/PDF.js-5.4-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+---
 
 ## Features
 
-- 📄 Render PDFs directly in Oracle APEX
+- 📄 Display PDFs inside Oracle APEX
 - ☁️ Supports Amazon S3 pre-signed URLs
-- 🔍 Zoom in/out (10%–250%)
-- 📱 Mobile-friendly
-- ⚡ Uses the latest PDF.js from jsDelivr CDN
-- 🎨 Integrates with Oracle APEX Universal Theme
-- 🖥 High DPI rendering for Retina displays
+- 📱 Mobile friendly
+- 📖 Single-page navigation (Previous / Next)
+- 🔍 Zoom from 10% to 250%
+- ⚡ High DPI (Retina) rendering
+- 🎨 Universal Theme compatible
+- 🚫 No plugins required
 
 ---
 
-# Prerequisites
+## Demo
 
-- Oracle APEX 24.x (or later)
-- Amazon S3 bucket containing PDF files
-- S3 bucket configured with CORS
-- PDF URL available in an APEX item
-
-Example:
-
-```sql
-P120_ATTACHMENT_ID
-```
-
-The item should contain a valid S3 pre-signed URL.
+<img src="docs/images/viewer.png" width="900">
 
 ---
 
-# S3 CORS Configuration
+# Requirements
 
-Your S3 bucket **must** allow requests from your APEX application.
+- Oracle APEX 24.x+
+- Amazon S3
+- PDF.js 5.4.x
+- HTTPS
+
+---
+
+# Amazon S3 CORS
+
+Your bucket must allow requests from your APEX application.
 
 Example:
 
@@ -41,7 +48,10 @@ Example:
 [
   {
     "AllowedHeaders": ["*"],
-    "AllowedMethods": ["GET","HEAD"],
+    "AllowedMethods": [
+      "GET",
+      "HEAD"
+    ],
     "AllowedOrigins": [
       "https://your-apex-domain.com"
     ],
@@ -60,285 +70,180 @@ with your APEX application URL.
 
 ---
 
-# Page Structure
+# Oracle APEX Setup
 
-The implementation consists of three parts:
+The implementation consists of three components.
 
-1. Static Content Region (HTML)
-2. Global JavaScript Declaration
-3. Execute When Page Loads
-
----
-
-# Static Content Region
-
-Create a **Static Content** region.
-
-```html
-<div class="apex-pdf-toolbar">
-    <button type="button"
-            id="pdfZoomOut"
-            class="t-Button t-Button--small"
-            aria-label="Zoom out">
-        <span class="fa fa-search-minus"></span>
-    </button>
-
-    <span id="pdfZoomLevel">100%</span>
-
-    <button type="button"
-            id="pdfZoomIn"
-            class="t-Button t-Button--small"
-            aria-label="Zoom in">
-        <span class="fa fa-search-plus"></span>
-    </button>
-</div>
-
-<div id="pdfStatus" class="apex-pdf-status">
-    Loading PDF...
-</div>
-
-<div id="pdfViewer" class="apex-pdf-viewer"></div>
+```
+Static Content Region
+        │
+        ▼
+JavaScript Global Declaration
+        │
+        ▼
+Execute When Page Loads
 ```
 
 ---
 
-# Function and Global Variable Declaration
+## 1. Static Content Region
+
+Create a **Static Content** region containing:
+
+- Previous Page button
+- Page indicator
+- Next Page button
+- Zoom controls
+- Status indicator
+- PDF Viewer container
+
+---
+
+## 2. Function and Global Variable Declaration
 
 Create a page-level JavaScript declaration.
 
-```javascript
-window.apexPdfViewer = {
-    pdfDocument: null,
-    scale: 1,
-    rendering: false,
-    pdfUrl: null,
+This object is responsible for:
 
-    async renderAllPages() {
-
-        const viewer = document.getElementById("pdfViewer");
-        const status = document.getElementById("pdfStatus");
-
-        if (!viewer || !status || !this.pdfDocument || this.rendering) {
-            return;
-        }
-
-        this.rendering = true;
-        viewer.innerHTML = "";
-
-        status.hidden = false;
-        status.textContent = "Rendering PDF...";
-
-        try {
-
-            for (let pageNumber = 1;
-                 pageNumber <= this.pdfDocument.numPages;
-                 pageNumber++) {
-
-                status.textContent =
-                    "Rendering page " +
-                    pageNumber +
-                    " of " +
-                    this.pdfDocument.numPages +
-                    "...";
-
-                const page =
-                    await this.pdfDocument.getPage(pageNumber);
-
-                const viewport =
-                    page.getViewport({
-                        scale: this.scale
-                    });
-
-                const outputScale =
-                    window.devicePixelRatio || 1;
-
-                const canvas =
-                    document.createElement("canvas");
-
-                const context =
-                    canvas.getContext("2d", {
-                        alpha: false
-                    });
-
-                canvas.className = "apex-pdf-page";
-
-                canvas.width =
-                    Math.floor(viewport.width * outputScale);
-
-                canvas.height =
-                    Math.floor(viewport.height * outputScale);
-
-                canvas.style.width =
-                    Math.floor(viewport.width) + "px";
-
-                canvas.style.height =
-                    Math.floor(viewport.height) + "px";
-
-                viewer.appendChild(canvas);
-
-                await page.render({
-                    canvasContext: context,
-                    viewport: viewport,
-                    transform:
-                        outputScale !== 1
-                            ? [outputScale,0,0,outputScale,0,0]
-                            : null
-                }).promise;
-            }
-
-            status.hidden = true;
-
-        } finally {
-
-            this.rendering = false;
-
-        }
-    },
-
-    async load(pdfjsLib) {
-
-        const status =
-            document.getElementById("pdfStatus");
-
-        if (!this.pdfUrl) {
-
-            status.textContent =
-                "No PDF URL supplied.";
-
-            return;
-        }
-
-        status.textContent = "Loading PDF...";
-
-        const loadingTask =
-            pdfjsLib.getDocument({
-                url: this.pdfUrl
-            });
-
-        this.pdfDocument =
-            await loadingTask.promise;
-
-        await this.renderAllPages();
-    },
-
-    async changeZoom(amount) {
-
-        if (this.rendering) {
-            return;
-        }
-
-        const newScale = Math.min(
-            2.5,
-            Math.max(
-                0.1,
-                Number((this.scale + amount).toFixed(1))
-            )
-        );
-
-        if (newScale === this.scale) {
-            return;
-        }
-
-        this.scale = newScale;
-
-        document.getElementById("pdfZoomLevel")
-            .textContent =
-            Math.round(this.scale * 100) + "%";
-
-        await this.renderAllPages();
-    }
-};
-```
+- Loading the PDF
+- Rendering pages
+- Zooming
+- Previous / Next navigation
+- High DPI rendering
+- Status updates
 
 ---
 
-# Execute When Page Loads
+## 3. Execute When Page Loads
+
+Load PDF.js from jsDelivr.
+
+Initialize the viewer.
+
+Attach button events.
+
+Load the PDF.
+
+---
+
+# PDF Source
+
+Assign the PDF URL from an APEX item.
+
+Example
 
 ```javascript
-(async function () {
-
-    window.apexPdfViewer.pdfUrl =
-        '&P120_ATTACHMENT_ID!JS.';
-
-    const pdfjsLib =
-        await import(
-            "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs"
-        );
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs";
-
-    document
-        .getElementById("pdfZoomIn")
-        .addEventListener("click", function () {
-            window.apexPdfViewer.changeZoom(0.1);
-        });
-
-    document
-        .getElementById("pdfZoomOut")
-        .addEventListener("click", function () {
-            window.apexPdfViewer.changeZoom(-0.1);
-        });
-
-    await window.apexPdfViewer.load(pdfjsLib);
-
-})();
+window.apexPdfViewer.pdfUrl =
+    '&P120_ATTACHMENT_ID!JS.';
 ```
+
+The item should contain a valid Amazon S3 pre-signed URL.
+
+---
+
+# Viewer Controls
+
+| Control | Description |
+|----------|-------------|
+| ◀ | Previous page |
+| ▶ | Next page |
+| 🔍➖ | Zoom Out |
+| 🔍➕ | Zoom In |
+
+---
+
+# Zoom
+
+| Property | Value |
+|-----------|------:|
+| Minimum | 10% |
+| Maximum | 250% |
+| Step | 10% |
+
+---
+
+# Rendering
+
+The viewer renders **one page at a time**.
+
+Benefits include:
+
+- Faster rendering
+- Lower memory usage
+- Better mobile performance
+- Large PDF support
+- Similar user experience to Adobe Reader
+
+---
+
+# Mobile Support
+
+The viewer has been tested with:
+
+- Desktop Chrome
+- Desktop Edge
+- Desktop Firefox
+- Android Chrome
+- iPhone Safari
+- iPhone Chrome
+
+Since rendering is performed by PDF.js instead of the browser's built-in PDF viewer, behavior is consistent across supported browsers.
 
 ---
 
 # Styling
 
-Example CSS:
+The viewer uses simple CSS classes:
 
-```css
-.apex-pdf-toolbar{
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    gap:12px;
-    margin-bottom:12px;
-}
+```
+.apex-pdf-toolbar
+.apex-pdf-viewer
+.apex-pdf-page
+.apex-pdf-status
+.apex-pdf-page-info
+```
 
-.apex-pdf-viewer{
-    overflow:auto;
-    text-align:center;
-}
+Customize these classes to match your APEX theme.
 
-.apex-pdf-page{
-    display:block;
-    margin:16px auto;
-    box-shadow:0 2px 10px rgba(0,0,0,.15);
-}
+---
 
-.apex-pdf-status{
-    text-align:center;
-    margin-bottom:10px;
-}
+# Project Structure
+
+```
+pdf-viewer/
+│
+├── README.md
+├── css/
+│   └── pdf-viewer.css
+├── js/
+│   └── pdf-viewer.js
+└── docs/
+    └── images/
+        └── viewer.png
 ```
 
 ---
 
-# Zoom Limits
+# Performance
 
-| Setting | Value |
-|----------|------:|
-| Minimum Zoom | 10% |
-| Maximum Zoom | 250% |
-| Zoom Step | 10% |
+Features included:
 
----
-
-# Notes
-
-- Uses **PDF.js 5.4.449** from jsDelivr.
-- No external libraries besides PDF.js are required.
-- Optimized for Retina/High DPI displays.
-- Works with Oracle APEX items containing S3 pre-signed URLs.
-- Requires the S3 bucket to have proper CORS configuration.
+- Single-page rendering
+- High DPI canvas rendering
+- Async page loading
+- Zoom without page refresh
+- Responsive layout
 
 ---
 
 # License
 
 MIT License
+
+---
+
+## Credits
+
+- Oracle APEX
+- Mozilla PDF.js
+- Amazon S3
