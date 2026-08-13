@@ -1,0 +1,211 @@
+# Oracle Quick SQL & Oracle APEX Generation Standard
+
+> Living document for AI-assisted Oracle Quick SQL generation.
+
+## Goal
+
+Generate Oracle Quick SQL that produces production-ready Oracle APEX
+database models with consistent naming, audit columns, triggers,
+indexes, views, and sample data.
+
+------------------------------------------------------------------------
+
+# 1. Global Defaults
+
+Unless instructed otherwise, assume:
+
+``` text
+#apex: true, auditcols: true
+```
+
+Generate:
+
+-   Sequences
+-   Tables
+-   PK/FK/CHECK constraints
+-   FK indexes
+-   BIU audit triggers
+-   Sample data
+-   Identity restart after sample data
+-   Views when requested
+
+------------------------------------------------------------------------
+
+# 2. Preferred Modelling Rules
+
+-   Prefer normalized (3NF) designs.
+-   Use parent/child relationships instead of repeating columns.
+-   Create lookup tables when lists are expected to grow.
+-   Use bridge tables for many-to-many relationships.
+-   Avoid Oracle reserved words.
+-   Rename reserved columns automatically (`desc` → `the_desc`).
+-   Use singular foreign key names (`project_id`, `department_id`).
+-   Prefer meaningful table names.
+
+------------------------------------------------------------------------
+
+# 3. Naming Standards
+
+## Sequences
+
+    <table>_seq
+
+## PK Constraints
+
+    <table>_id_pk
+
+## FK Constraints
+
+    <child>_<parent>_id_fk
+
+## Check Constraints
+
+    <table>_<column>_ck
+
+## FK Indexes
+
+    <table>_i1
+
+## Triggers
+
+    <table>_biu
+
+------------------------------------------------------------------------
+
+# 4. Audit Standard
+
+Every table contains:
+
+-   created
+-   created_by
+-   updated
+-   updated_by
+
+Trigger uses
+
+``` sql
+coalesce(sys_context('APEX$SESSION','APP_USER'),user)
+```
+
+------------------------------------------------------------------------
+
+# 5. Datatypes
+
+  Quick SQL    Oracle
+  ------------ --------------------------------
+  num          NUMBER
+  int          INTEGER
+  d/date       DATE
+  ts           TIMESTAMP
+  tstz/tswtz   TIMESTAMP WITH LOCAL TIME ZONE
+  vc           VARCHAR2(4000)
+  vc50         VARCHAR2(50)
+  vc255        VARCHAR2(255)
+  vc32k        VARCHAR2(32767)
+  clob         CLOB
+  blob         BLOB
+  json         CLOB CHECK (IS JSON)
+  file         BLOB + metadata
+
+------------------------------------------------------------------------
+
+# 6. Supported Directives
+
+## Table
+
+-   /insert
+-   /auditcols
+-   /audit
+-   /api
+-   /rest
+-   /compress
+-   /select
+-   /unique
+-   /colprefix
+
+## Column
+
+-   /nn
+-   /pk
+-   /check
+-   /between
+-   /values
+-   /default
+-   /constant
+-   /upper
+-   /lower
+-   /idx
+-   /unique
+-   /references
+-   /hidden
+-   comments in \[\]
+
+------------------------------------------------------------------------
+
+# 7. Views
+
+Generate when requested.
+
+Use Oracle (+) outer join syntax.
+
+Include:
+
+-   parent columns
+-   child columns
+-   audit columns
+-   aliases to avoid duplicate names
+
+------------------------------------------------------------------------
+
+# 8. Sample Data
+
+-   Respect /insert counts.
+-   Honour /values lists.
+-   Generate valid FK values.
+-   Commit after each table.
+-   Restart identity after inserts.
+
+------------------------------------------------------------------------
+
+# 9. Oracle APEX Best Practices
+
+-   Generate APEX-ready schemas.
+-   Include audit columns.
+-   Use NUMBER surrogate keys.
+-   Generate FK indexes.
+-   Use readable aliases in views.
+-   Support File Browse columns.
+-   Prefer lookup tables over hard-coded checks when values may expand.
+-   Keep naming consistent across all objects.
+
+------------------------------------------------------------------------
+
+# 10. AI Generation Rules
+
+When asked to generate Quick SQL:
+
+1.  Think about the data model before writing code.
+2.  Normalize where practical.
+3.  Use parent-child relationships.
+4.  Avoid duplicate data.
+5.  Generate intuitive object names.
+6.  Generate APEX-friendly schemas.
+7.  Produce views for reporting.
+8.  Keep constraint names consistent.
+9.  Generate sample data unless told otherwise.
+10. Follow this document before generic Quick SQL defaults.
+
+------------------------------------------------------------------------
+
+# 11. Future Topics
+
+-   Composite PKs
+-   Cascade deletes
+-   REST generation
+-   Package APIs
+-   JSON modelling
+-   Lookup templates
+-   Security
+-   Multi-schema
+-   Performance patterns
+-   Large APEX applications
