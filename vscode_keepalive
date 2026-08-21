@@ -8,7 +8,8 @@ Add these two properties under Connection → Advanced and reconnect.
 
 Name	Value
 oracle.net.keepAlive	true
-oracle.net.TCP_KEEPIDLE	600
+oracle.net.TCP_KEEPIDLE	120
+oracle.net.TCP_KEEPINTERVAL 30
 
 Where these go
 Open the connection in the Oracle Explorer panel, right-click → Edit (or Update Connection).
