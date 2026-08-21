@@ -1,0 +1,19 @@
+Oracle SQL Developer for VS Code — Connection Keepalive
+
+Notes on stopping idle Oracle connections from being dropped by firewalls, load balancers, or VPNs when using the Oracle SQL Developer extension for VS Code.
+
+TL;DR
+
+Add these two properties under Connection → Advanced and reconnect.
+
+Name	Value
+oracle.net.keepAlive	true
+oracle.net.TCP_KEEPIDLE	600
+
+Where these go
+Open the connection in the Oracle Explorer panel, right-click → Edit (or Update Connection).
+Switch from the Details tab to the Advanced tab.
+Click + Add and enter the name/value pairs above.
+Save, then disconnect and reconnect. Connection properties are read when the JDBC connection is created; they do not apply to an already-open session.
+
+These are standard Oracle JDBC thin-driver connection properties, so the same values work anywhere the thin driver is used (SQLcl, JDBC apps, connection pools).
