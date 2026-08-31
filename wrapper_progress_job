@@ -1,0 +1,145 @@
+# Building Live, Dynamic HTML in APEX with a "PL/SQL Function Body Returning a CLOB" Region
+
+## The problem we were solving
+
+We had a background job (`p_issue_certificates`, submitted via `p_submit_certificate_job`)
+processing hundreds of certificates asynchronously. The page needed to show the user
+*how it's going right now* — X of Y sent, a percentage, an estimated time remaining —
+without that information going stale the moment the page finishes loading.
+
+A plain SQL report region or static HTML region can't do this: it either shows a fixed
+table of rows, or fixed text. We needed a region whose content is *computed fresh, in
+PL/SQL, every time it's asked to render* — reading live tables (`cne_certificate_log`,
+`cne_registration`, `user_scheduler_running_jobs`) and turning that into a formatted
+HTML snippet on the fly.
+
+## The wrapper: region type "PL/SQL Function Body Returning a CLOB"
+
+APEX has a region source type that does exactly this. Instead of writing a SQL query
+or static content, you write a PL/SQL function body whose job is to **build a string
+and `return` it**. Whatever CLOB value the function returns becomes the region's raw
+HTML output for that render.
+
+This is the "wrapper" — it wraps arbitrary PL/SQL logic (queries, conditionals, string
+building) and hands the result to APEX as if it were the region's markup. Every time
+the region is rendered — a full page load, or later an Ajax refresh — this function
+runs again from scratch, so the output reflects whatever the database looks like *at
+that exact moment*. That's what makes the content "dynamic" rather than a snapshot.
+
+### The gotcha we hit: `htp.p` vs `return`
+
+There are two different PL/SQL-driven region types in APEX, and they work differently:
+
+- **PL/SQL Dynamic Content** — you *print* output using `htp.p(...)` (or `htp.prn`).
+  APEX captures whatever gets printed to the output buffer during execution.
+- **PL/SQL Function Body Returning a CLOB** — you *return* a CLOB value with
+  `return v_html;`. Printing with `htp.p` does nothing useful here.
+
+We wrote the first version using `htp.p` calls, but the actual region on the page was
+the second type — which raised `ORA-06503: PL/SQL: Function returned without value`,
+because a function-body region must hit an explicit `return` on every code path. The
+fix was mechanical: swap every `htp.p('...')` for `v_html := '...'`, and add
+`return v_html;` (with an `else v_html := '';` branch so every path assigns
+something) at the end.
+
+## How the region was built, step by step
+
+**1. Query the live state.** Three small lookups, done fresh on every render:
+
+```sql
+-- is a certificate job currently running, and how long has it been going?
+select elapsed_time into v_elapsed
+  from user_scheduler_running_jobs
+ where job_name like 'CERT_JOB_%' and rownum = 1;
+
+-- how many have succeeded so far?
+select count(*) into v_processed from cne_certificate_log where status = 'SUCCESS';
+
+-- how many are still eligible and not yet certified?
+select count(*) into v_remaining
+  from cne_registration
+ where attendance_yn = 'Y'
+   and email is not null
+   and (certificate_yn = 'N' or certificate_yn is null)
+   and gazette_id is not null;
+```
+
+**2. Derive the numbers a person actually wants to see.** Percent complete, and an
+estimated time remaining extrapolated from the job's own pace so far (average time
+per certificate so far, multiplied by how many are left):
+
+```sql
+v_total := v_processed + v_remaining;
+v_pct   := case when v_total > 0 then round(v_processed / v_total * 100) else 0 end;
+
+v_est_seconds := case when v_processed > 0 then
+    (extract(day from v_elapsed)*86400 + extract(hour from v_elapsed)*3600 +
+     extract(minute from v_elapsed)*60 + extract(second from v_elapsed))
+    / v_processed * v_remaining
+end;
+v_est_minutes := round(nvl(v_est_seconds, 0) / 60);
+```
+
+**3. Build the HTML as a string, branching on state.** Three states: a job is
+actively running (show a progress bar), nothing's running but everything's done (show
+a success message), or nothing to report (return empty string, region renders
+nothing):
+
+```sql
+if v_job_running then
+    v_html := '<div style="...">...progress bar + numbers...</div>';
+elsif v_remaining = 0 and v_processed > 0 then
+    v_html := '<div style="...">All certificates have been sent.</div>';
+else
+    v_html := '';
+end if;
+
+return v_html;
+```
+
+Styling is inline (`style="..."` on each element) rather than relying on external
+CSS classes, so the card looks the same regardless of the page's theme.
+
+## Making it refresh without a full page reload
+
+A function-body region only re-runs when APEX renders it — normally that means page
+load or a page submit. To get it updating live every few seconds, we paired it with
+a Dynamic Action that triggers an **Ajax region refresh**, which re-invokes this same
+PL/SQL function server-side and swaps the returned HTML into the page — no full
+navigation.
+
+Two ways to trigger that refresh on an interval, depending on APEX version:
+
+- **APEX 20.2+**: a Dynamic Action with Event = *Timer* (Repeat = Yes, Interval =
+  5000 ms), True Action = *Refresh*, targeting the region's Static ID.
+- **Older APEX** (no *Timer* event available): a Dynamic Action on *Page Load*,
+  action = *Execute JavaScript Code*:
+
+  ```javascript
+  setInterval(function() {
+      apex.region("email_progress_region").refresh();
+  }, 5000);
+  ```
+
+Either approach requires the region to have a **Static ID** set (Region → Advanced →
+Static ID) — that's the handle `apex.region(...)` and the Dynamic Action's Affected
+Elements use to know which region to refresh.
+
+## Why the numbers can look "wrong" briefly
+
+Because each refresh re-runs the queries against live tables, two snapshots taken a
+few seconds apart during an active job will legitimately show different numbers —
+that's not a bug, it's the job actually making progress between renders. The one real
+accuracy caveat we ran into: `cne_certificate_log` isn't scoped to a single job run,
+so the processed/ETA figures reflect *all-time* successes logged, not just the
+currently running batch — worth truncating that log before a real run if you want the
+percentage and ETA to be trustworthy.
+
+## Takeaway / reusable pattern
+
+Any time a page needs to show computed, live-database-driven HTML — a status card, a
+progress indicator, a conditional banner — a "PL/SQL Function Body Returning a CLOB"
+region is the right tool: write PL/SQL that queries whatever you need, builds an HTML
+string, and returns it. Combine it with a Dynamic Action (Timer, or a JS
+`setInterval` + `apex.region(...).refresh()` on older versions) whenever the content
+needs to update on its own rather than only on page load.
