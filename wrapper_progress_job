@@ -42,7 +42,7 @@ fix was mechanical: swap every `htp.p('...')` for `v_html := '...'`, and add
 `return v_html;` (with an `else v_html := '';` branch so every path assigns
 something) at the end.
 
-## How the region was built, step by step
+## How the region was built, step by step (our worked example)
 
 **1. Query the live state.** Three small lookups, done fresh on every render:
 
@@ -100,31 +100,6 @@ return v_html;
 Styling is inline (`style="..."` on each element) rather than relying on external
 CSS classes, so the card looks the same regardless of the page's theme.
 
-## Making it refresh without a full page reload
-
-A function-body region only re-runs when APEX renders it — normally that means page
-load or a page submit. To get it updating live every few seconds, we paired it with
-a Dynamic Action that triggers an **Ajax region refresh**, which re-invokes this same
-PL/SQL function server-side and swaps the returned HTML into the page — no full
-navigation.
-
-Two ways to trigger that refresh on an interval, depending on APEX version:
-
-- **APEX 20.2+**: a Dynamic Action with Event = *Timer* (Repeat = Yes, Interval =
-  5000 ms), True Action = *Refresh*, targeting the region's Static ID.
-- **Older APEX** (no *Timer* event available): a Dynamic Action on *Page Load*,
-  action = *Execute JavaScript Code*:
-
-  ```javascript
-  setInterval(function() {
-      apex.region("email_progress_region").refresh();
-  }, 5000);
-  ```
-
-Either approach requires the region to have a **Static ID** set (Region → Advanced →
-Static ID) — that's the handle `apex.region(...)` and the Dynamic Action's Affected
-Elements use to know which region to refresh.
-
 ## Why the numbers can look "wrong" briefly
 
 Because each refresh re-runs the queries against live tables, two snapshots taken a
@@ -135,11 +110,292 @@ so the processed/ETA figures reflect *all-time* successes logged, not just the
 currently running batch — worth truncating that log before a real run if you want the
 percentage and ETA to be trustworthy.
 
+## The background-job procedures, generalized
+
+The progress card above is only useful because the actual work — generating and
+emailing each certificate — runs as an async `DBMS_SCHEDULER` job rather than
+blocking the page. That pattern (a submit-wrapper + a session-aware worker
+procedure) is just as reusable as the HTML wrapper, so here it is generalized.
+
+**Why two procedures, not one:** the wrapper (`p_submit_..._job`) runs *inside* the
+live APEX page process, where things like `apex_application.g_flow_id` (the app ID)
+and `apex_application.g_user` (the current user) are available. The worker
+(`p_process_...`) runs *inside the scheduler job*, in a brand-new database session
+with none of that context — so the wrapper's job is to capture what the worker will
+need and hand it over as job arguments.
+
+**Submit wrapper** — called directly from a page process/button, returns almost
+instantly:
+
+```sql
+create or replace procedure p_submit_<<your_job>>_job (
+    p_id in <<your_key_table>>.<<your_key_column>>%type
+)
+is
+    v_job_name varchar2(128);
+    v_app_id   number        := apex_application.g_flow_id;
+    v_username varchar2(128) := apex_application.g_user;
+begin
+    v_job_name := '<<YOUR_JOB_NAME_PREFIX>>_' || p_id || '_' || to_char(systimestamp, 'HH24MISSFF3');
+
+    dbms_scheduler.create_job (
+        job_name            => v_job_name,
+        job_type            => 'STORED_PROCEDURE',
+        job_action          => '<<YOUR_WORKER_PROCEDURE_NAME>>',
+        number_of_arguments => 3,
+        start_date          => systimestamp,
+        enabled             => false,   -- create disabled...
+        auto_drop           => true
+    );
+
+    dbms_scheduler.set_job_argument_value(job_name => v_job_name, argument_position => 1, argument_value => p_id);
+    dbms_scheduler.set_job_argument_value(job_name => v_job_name, argument_position => 2, argument_value => v_app_id);
+    dbms_scheduler.set_job_argument_value(job_name => v_job_name, argument_position => 3, argument_value => v_username);
+    -- ...set every argument, THEN enable — enabling first risks the job starting
+    -- before its arguments are attached.
+
+    dbms_scheduler.enable(v_job_name);
+end p_submit_<<your_job>>_job;
+/
+```
+
+Two gotchas worth carrying forward: `dbms_scheduler.set_job_argument_value` is
+overloaded, so positional calls with a `NUMBER` argument can raise
+`PLS-00307: too many declarations ... match this call` — always use the named
+`argument_position => ..., argument_value => ...` form shown above. And the
+create-disabled → set arguments → enable ordering isn't optional; enabling at
+creation time can let the job start running before an argument is attached.
+
+**Worker procedure** — what the scheduler job actually runs, once per eligible row:
+
+```sql
+create or replace procedure <<YOUR_WORKER_PROCEDURE_NAME>> (
+    p_id       in <<your_key_table>>.<<your_key_column>>%type,
+    p_app_id   in number,
+    p_username in varchar2
+)
+is
+    v_error_msg varchar2(4000);
+begin
+    -- Only needed if the per-row work below calls APEX APIs (APEX_MAIL, a
+    -- shared file/template lookup, etc.) that require a live session — those
+    -- will fail with something like ORA-20001 "must be invoked from within an
+    -- application session" without this, since a scheduler job otherwise has
+    -- no APEX session context at all.
+    apex_session.create_session(
+        p_app_id   => p_app_id,
+        p_page_id  => 0,
+        p_username => p_username
+    );
+
+    for i in (
+        select <<your_row_key_column>>
+          from <<your_source_table>>
+         where <<your_grouping_column>> = p_id
+           and <<your_eligibility_conditions>>
+    )
+    loop
+        begin
+            <<your_per_row_processing_call>>(i.<<your_row_key_column>>);
+
+            update <<your_source_table>>
+               set <<your_completion_flag_column>> = <<your_completion_value>>
+             where <<your_row_key_column>> = i.<<your_row_key_column>>;
+
+            insert into <<your_progress_log_table>> (<<your_log_key_column>>, status)
+            values (i.<<your_row_key_column>>, 'SUCCESS');
+
+            commit;
+        exception
+            when others then
+                v_error_msg := sqlerrm;
+                rollback;
+                insert into <<your_progress_log_table>> (<<your_log_key_column>>, status, message)
+                values (i.<<your_row_key_column>>, 'ERROR', v_error_msg);
+                commit;
+        end;
+    end loop;
+
+    apex_session.delete_session;
+end <<YOUR_WORKER_PROCEDURE_NAME>>;
+/
+```
+
+Why each piece matters, generically:
+
+- **Per-row `begin`/`exception`/`commit`, not one batch transaction.** One bad row
+  (a bad email, a downstream API hiccup) logs an error and moves on instead of
+  rolling back every row already done — important the moment "hundreds of rows" is
+  involved, since redoing successful work is wasteful and can duplicate side effects
+  (e.g. re-sending an email that already went out).
+- **`sqlerrm` must be captured into a variable before use in SQL**, not referenced
+  directly inside an `INSERT ... VALUES(...)` — Oracle's SQL parser doesn't
+  recognize it as a valid function there and raises `ORA-00984`.
+- **The progress log table is what the "generic, reusable template" region above
+  reads from** — so this worker and that region are a matched pair: this writes the
+  rows, that reads them back as a live HTML card. `dbms_output` doesn't work as a
+  substitute here, since nothing is watching it once this runs as a background job.
+- **`apex_session.create_session` / `delete_session`** are only necessary if
+  `<<your_per_row_processing_call>>` touches APEX-specific APIs. If it's pure SQL/
+  PL/SQL with no APEX dependency, this pair can be dropped entirely.
+
+## Generic, reusable template (the progress-card region)
+
+Stripped of the CNE-specific table/column names, this is the same procedure as a
+drop-in starting point for any other background job that needs a live progress card.
+The three spots marked with `<<...>>` are the only things that need adapting to a new
+use case — the structure (state check → counts → percent/ETA math → branch → return)
+stays the same:
+
+```sql
+declare
+    v_job_running boolean := false;
+    v_elapsed     interval day to second;
+    v_processed   number;
+    v_remaining   number;
+    v_total       number;
+    v_pct         number;
+    v_est_seconds number;
+    v_est_minutes number;
+    v_est_label   varchar2(100);
+    v_html        clob;
+begin
+    -- 1. is a matching background job currently running, and for how long?
+    begin
+        select elapsed_time
+          into v_elapsed
+          from user_scheduler_running_jobs
+         where job_name like '<<YOUR_JOB_NAME_PREFIX>>_%'   -- e.g. 'CERT_JOB_%'
+           and rownum = 1;
+        v_job_running := true;
+    exception
+        when no_data_found then
+            v_job_running := false;
+    end;
+
+    -- 2. how many units of work have succeeded so far?
+    --    matches the progress log table the worker procedure writes to
+    select count(*) into v_processed
+      from <<your_progress_log_table>>
+     where status = 'SUCCESS';
+
+    -- 3. how many are still outstanding?
+    --    matches the worker procedure's own eligibility query
+    select count(*) into v_remaining
+      from <<your_source_table>>
+     where <<your_eligibility_conditions>>;
+
+    -- 4. derive percent complete and an estimate, from this job's own pace
+    v_total := v_processed + v_remaining;
+    v_pct   := case when v_total > 0 then round(v_processed / v_total * 100) else 0 end;
+
+    if v_job_running then
+        v_est_seconds := case when v_processed > 0 then
+            (extract(day from v_elapsed)*86400 + extract(hour from v_elapsed)*3600 +
+             extract(minute from v_elapsed)*60 + extract(second from v_elapsed))
+            / v_processed * v_remaining
+        end;
+        v_est_minutes := round(nvl(v_est_seconds, 0) / 60);
+
+        v_est_label := case
+            when v_est_minutes <= 0 then 'less than a minute'
+            when v_est_minutes = 1  then 'about 1 minute'
+            else 'about ' || v_est_minutes || ' minutes'
+        end;
+
+        -- 5. build the HTML card — swap the wording/colors, keep the structure
+        v_html :=
+        '<div style="max-width:480px;padding:16px 20px;border:1px solid #d7dde3;border-radius:10px;
+                    background:#f7f9fb;font-family:sans-serif;margin-bottom:16px;">
+          <div style="font-weight:600;font-size:15px;color:#1f2937;margin-bottom:6px;">
+            Processing&hellip;
+          </div>
+          <div style="background:#e3e8ee;border-radius:6px;overflow:hidden;height:10px;margin-bottom:8px;">
+            <div style="background:#2e7d32;height:100%;width:' || v_pct || '%;"></div>
+          </div>
+          <div style="font-size:13px;color:#4b5563;">
+            ' || v_processed || ' of ' || v_total || ' complete (' || v_pct || '%) &mdash; ' || v_est_label || ' remaining
+          </div>
+        </div>';
+
+    elsif v_remaining = 0 and v_processed > 0 then
+        v_html :=
+        '<div style="max-width:480px;padding:14px 20px;border:1px solid #bfe3c4;border-radius:10px;
+                    background:#eefbf0;font-family:sans-serif;margin-bottom:16px;color:#1f6b2c;font-size:14px;">
+          &#9989; All done.
+        </div>';
+    else
+        v_html := '';
+    end if;
+
+    return v_html;
+end;
+```
+
+Note this template — like our real version — counts `v_processed` across *everything*
+logged with `status = 'SUCCESS'`, not scoped to the current run. If you'll be running
+this job repeatedly against the same log table, either truncate/clear the log before
+each run, or add a `WHERE` clause scoping to rows created after the job's own start
+time, so the percentage and ETA reflect the current run rather than all history.
+
+## Wiring it into APEX, step by step (generic)
+
+These are the Page Designer steps to set the progress-card region up on any page,
+for any background job — not specific to certificates. (The job/worker procedures
+above are wired up separately: `p_submit_..._job` is what a button's page process
+calls, and its worker's name goes into that procedure's `job_action`.)
+
+1. **Create or choose the region** where the live content should appear.
+
+2. **Set the region's Source → Type to "PL/SQL Function Body Returning a CLOB."**
+   This is what makes it a wrapper: the region's displayed content becomes whatever
+   your PL/SQL `return`s, recomputed every time the region renders.
+
+3. **Paste in a function body that ends in `return`.** Follow the template above —
+   query whatever live state defines "in progress" vs. "done" for your job, derive
+   any numbers you want to show, build an HTML string, and make sure every branch of
+   your logic (`if`/`elsif`/`else`) assigns to that string, with a single `return` at
+   the end. A path that falls through without assigning raises
+   `ORA-06503: Function returned without value`.
+
+4. **Give the region a Static ID** (region's Advanced section → Static ID, e.g.
+   `progress_card`). This is the handle everything else uses to target it — without
+   one, you can't refresh it via Ajax or JavaScript.
+
+5. **Test it standalone first.** Load the page and confirm the HTML renders as
+   expected before wiring up auto-refresh — easier to debug the PL/SQL in isolation
+   than debugging PL/SQL and a refresh timer at the same time.
+
+6. **Add a Dynamic Action to keep it live**, since a function-body region only
+   re-runs when the page renders (load or submit) — not on its own:
+   - **APEX 20.2+**: Event = *Timer* (Repeat = Yes, Interval = however often you
+     want it checked, e.g. 5000 ms), True Action = *Refresh*, Affected Elements =
+     the region's Static ID.
+   - **Older APEX** (no *Timer* event in the Event dropdown): Event = *Page Load*,
+     True Action = *Execute JavaScript Code*:
+     ```javascript
+     setInterval(function() {
+         apex.region("<<your_static_id>>").refresh();
+     }, 5000);
+     ```
+   Either way, this triggers a partial-page Ajax refresh that re-invokes your PL/SQL
+   function server-side and swaps in the freshly returned HTML — no full page reload.
+
+7. **If some other element's visibility should reflect the same live state**
+   (e.g. hiding a "start" button while the job is running, showing it again once
+   done), give that region/button a Server-side Condition based on the same
+   underlying check, and add it to the same refresh cycle — either as a second
+   Affected Element on the same Dynamic Action, or a second line inside the same
+   `setInterval`. Otherwise you end up with one part of the page updating live while
+   another only catches up on a full reload, which reads as inconsistent.
+
 ## Takeaway / reusable pattern
 
 Any time a page needs to show computed, live-database-driven HTML — a status card, a
 progress indicator, a conditional banner — a "PL/SQL Function Body Returning a CLOB"
 region is the right tool: write PL/SQL that queries whatever you need, builds an HTML
-string, and returns it. Combine it with a Dynamic Action (Timer, or a JS
-`setInterval` + `apex.region(...).refresh()` on older versions) whenever the content
-needs to update on its own rather than only on page load.
+string, and returns it. Pair it with a submit-wrapper + session-aware worker
+procedure pair whenever the underlying work is long-running or touches
+APEX-specific APIs, and a Dynamic Action (Timer, or a JS `setInterval` +
+`apex.region(...).refresh()` on older versions) whenever the content needs to update
+on its own rather than only on page load.
