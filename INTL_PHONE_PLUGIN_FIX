@@ -1,0 +1,96 @@
+// Set values for sdIntlPhones.min.js and sdIntlPhones.js
+
+$.widget( "ui.sdIntrlPhones", {
+
+  // Default options.
+  options: {
+     itemName: '',
+     storageFormat: 1,
+     messages: null,
+     suffix: '_iti'
+  },
+
+  // Logging for "regular" text elements
+  log: function() {
+    var args = Array.prototype.join.call( arguments, ', ' );
+    apex.debug.message(4, "sdIntrlPhones:", args);
+  },
+
+  // Enhanced log
+  // accepts 2 objects for logging
+  elog: function(p1,p2) {
+    apex.debug.message(4, "sdIntrlPhones:", p1, p2);
+  },
+
+
+  _create: function() {
+    var uiw = this;
+
+    // Options are already merged and stored in this.options (or uiw.options)
+    uiw.log("_create");
+    uiw.log("itemName", uiw.options.itemName);
+    uiw.log("suffix", uiw.options.suffix);
+    uiw.log("storageFormat", uiw.options.storageFormat);
+    uiw.log("labelName", uiw.options.labelName);
+    uiw.log("labelTemplate", uiw.options.labelTemplate);
+
+    uiw._values = {
+        itiName:  uiw.options.itemName + uiw.options.suffix,
+        messages: JSON.parse(uiw.options.messages)
+    };
+
+    uiw.log("itiName", uiw._values.itiName);
+    uiw.elog("messages", uiw._values.messages);
+
+    // Init APEX pageitem functions
+    uiw._initApexItem();
+  },
+
+
+  _initApexItem: function () {
+    var uiw = this;
+
+    uiw.log("_initApexItem", "Registering with apex.item.create for " + uiw.options.itemName);
+    // Set and get value via apex functions
+    apex.item.create(uiw.options.itemName, {
+
+       getValue: function() {
+          // get the number in the representation stored by storageFormat
+          return window[uiw._values.itiName].getNumber(intlTelInputUtils.numberFormat[uiw.options.storageFormat]);
+       },
+
+       getValidationMessage: function() {
+         // Phone-number validity check disabled (2026-08-26) — always report no error.
+         return "";
+       },
+       getValidity: function() {
+         return {
+           customError: false,
+           patternMismatch: false,
+           rangeOverflow: false,
+           rangeUnderflow: false,
+           stepMismatch: false,
+           tooLong: false,
+           tooShort: false,
+           typeMismatch: false,
+           // Phone-number validity check disabled (2026-08-26) — was:
+           // valid: !!window[uiw._values.itiName].getNumber()? window[uiw._values.itiName].isValidNumber(): true,
+           valid: true,
+           valueMissing: false
+          }
+       }
+
+    });
+
+  },
+
+  isValidNumber: function() {
+    return window[uiw._values.itiName].isValidNumber();
+  },
+
+  getValidationError: function() {
+    return window[uiw._values.itiName].getValidationError();
+  }
+
+
+});
