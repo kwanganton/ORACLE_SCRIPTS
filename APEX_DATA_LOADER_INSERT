@@ -1,0 +1,47 @@
+CREATE OR REPLACE FUNCTION get_retry_insert_sql (
+  p_table      IN VARCHAR2,                -- e.g. 'COURSERA_IMPORT'
+  p_err_table  IN VARCHAR2 DEFAULT NULL,   -- defaults to <table>_ERR$
+  p_log_errors IN VARCHAR2 DEFAULT 'N'     -- 'Y' adds LOG ERRORS clause
+) RETURN CLOB IS
+/*=====================================================================
+  Returns an INSERT ... SELECT statement that copies rows from the
+  error log table back into the target table (matching columns only).
+
+  Usage:
+    SELECT get_retry_insert_sql('COURSERA_IMPORT') FROM dual;
+    SELECT get_retry_insert_sql('COURSERA_IMPORT', p_log_errors => 'Y') FROM dual;
+=====================================================================*/
+  l_table  VARCHAR2(128) := UPPER(p_table);
+  l_err    VARCHAR2(128) := UPPER(NVL(p_err_table, SUBSTR(p_table, 1, 123) || '_ERR$'));
+  l_cols   CLOB;
+  l_sql    CLOB;
+BEGIN
+  l_table := DBMS_ASSERT.SQL_OBJECT_NAME(l_table);
+  l_err   := DBMS_ASSERT.SQL_OBJECT_NAME(l_err);
+
+  SELECT LISTAGG(t.column_name, ',' || CHR(10) || '       ')
+           WITHIN GROUP (ORDER BY t.column_id)
+  INTO   l_cols
+  FROM   user_tab_columns t
+  WHERE  t.table_name = l_table
+  AND    EXISTS (SELECT 1 FROM user_tab_columns e
+                 WHERE  e.table_name  = l_err
+                 AND    e.column_name = t.column_name);
+
+  IF l_cols IS NULL THEN
+    RETURN '-- No matching columns between ' || l_table || ' and ' || l_err;
+  END IF;
+
+  l_sql := 'INSERT INTO ' || LOWER(l_table) || CHR(10) ||
+           '      (' || l_cols || ')' || CHR(10) ||
+           'SELECT ' || l_cols || CHR(10) ||
+           'FROM   ' || LOWER(l_err);
+
+  IF UPPER(p_log_errors) = 'Y' THEN
+    l_sql := l_sql || CHR(10) ||
+             'LOG ERRORS INTO ' || LOWER(l_err) || ' (''RETRY'') REJECT LIMIT UNLIMITED';
+  END IF;
+
+  RETURN l_sql || ';';
+END get_retry_insert_sql;
+/
